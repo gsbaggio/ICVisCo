@@ -1,18 +1,49 @@
 # https://tltsilveira.github.io/public/CSGraduationWork.pdf material do thiago
 
 import numpy as np
+import matplotlib.pyplot as plt
 
-def criar_matriz_gradiente(altura, largura):
-    linha_gradiente = np.linspace(0, 255, largura)
+def imprime_matriz(matriz):
+    for i in range(len(matriz)):
+        print(matriz[i])
+
+def visualizar_matriz(matriz):
+    plt.figure(figsize=(8, 8))
+    plt.imshow(matriz, cmap='gray', vmin=0, vmax=255)
+    plt.title("Grafico")
+    plt.colorbar(label='Intensidade')
+    plt.show()
+
+def reconstruir_matriz_de_blocos(blocos, altura, largura):
+    matriz_reconstruida = np.zeros((altura, largura))
+    bloco_idx = 0
     
-    matriz = np.tile(linha_gradiente, (altura, 1))
+    for i in range(0, altura, 8):
+        for j in range(0, largura, 8):
+            if bloco_idx < len(blocos):
+                altura_bloco = min(8, altura - i)
+                largura_bloco = min(8, largura - j)
+                matriz_reconstruida[i:i+altura_bloco, j:j+largura_bloco] = blocos[bloco_idx][:altura_bloco, :largura_bloco]
+                bloco_idx += 1
+    
+    return matriz_reconstruida
 
-    return matriz
+def obter_matriz_exemplo():
 
-def level_shift(matriz):
-    matriz = matriz - 128
-    matriz = matriz.astype(np.int8)
-    return matriz
+    dados_matriz = [
+        [127, 123, 125, 120, 126, 123, 127, 128],
+        [142, 135, 144, 143, 140, 145, 142, 140],
+        [128, 126, 128, 122, 125, 125, 122, 129],
+        [132, 144, 144, 139, 140, 149, 140, 142],
+        [128, 124, 128, 126, 127, 120, 128, 129],
+        [133, 142, 141, 141, 143, 140, 146, 138],
+        [124, 127, 128, 129, 121, 128, 129, 128],
+        [134, 143, 140, 139, 136, 140, 138, 141]
+    ]
+
+    matriz_a8 = np.array(dados_matriz, dtype=np.int16)
+
+    return matriz_a8
 
 def criar_blocos_8x8(matriz):
     altura, largura = matriz.shape
@@ -25,133 +56,84 @@ def criar_blocos_8x8(matriz):
 
     return blocos
 
-def DCT_2D_metodo2(bloco): # como esta no artigo do Thiago
+def cria_matriz_transformacao_DCT():
     N = 8
-    bloco_dct = np.zeros((N, N))
-
+    matriz_DCT = np.zeros((N, N))
     for u in range(N):
         for v in range(N):
             if u == 0:
-                Cu = 1 / np.sqrt(N)
+                au = np.sqrt(1 / N)
             else:
-                Cu = np.sqrt(2 / N)
-            if v == 0:
-                Cv = 1 / np.sqrt(N)
-            else:
-                Cv = np.sqrt(2 / N)
+                au = np.sqrt(2 / N)
+            
+            matriz_DCT[u, v] = au * np.cos((2 * v + 1) * u * np.pi / (2 * N))
+    return matriz_DCT
 
-            sum_val = 0
-            for x in range(N):
-                for y in range(N):
-                    sum_val += bloco[x, y] * np.cos((2 * x + 1) * u * np.pi / (2 * N)) * np.cos((2 * y + 1) * v * np.pi / (2 * N))
-
-            bloco_dct[u, v] = Cu * Cv * sum_val
-
-    return bloco_dct
-
-def DCT_2D(bloco): # outro jeito que quero testar
+def DCT_matricial(blocos):
     N = 8
-    bloco_dct = np.zeros((N, N))
-
-    for u in range(N):
-        for v in range(N):
-            if u == 0:
-                Cu = 1 / np.sqrt(2)
-            else:
-                Cu = 1
-
-            if v == 0:
-                Cv = 1 / np.sqrt(2)
-            else:
-                Cv = 1
-
-            sum_val = 0
-            for x in range(N):
-                for y in range(N):
-                    sum_val += bloco[x, y] * np.cos((2 * x + 1) * u * np.pi / (2 * N)) * np.cos((2 * y + 1) * v * np.pi / (2 * N))
-            bloco_dct[u, v] = Cu * Cv * sum_val / 4
-
-    return bloco_dct
-
-def transformada_DCT_blocos(blocos):
+    matriz_DCT = cria_matriz_transformacao_DCT()
     blocos_dct = []
     for bloco in blocos:
-        bloco_dct = DCT_2D_metodo2(bloco)
+        bloco_dct = np.dot(np.dot(matriz_DCT, bloco), matriz_DCT.T)
         blocos_dct.append(bloco_dct)
     return blocos_dct
 
+def cria_matriz_quantizacao():
+    R = 10
+    matriz = np.zeros((8, 8))
+    for i in range(8):
+        for j in range(8):
+            matriz[i, j] = 1 + (i + j) * R
+    return matriz
+
 def quantizacao(bloco_dct, matriz_quantizacao):
-    bloco_quantizado = np.round(bloco_dct / matriz_quantizacao)
+    bloco_quantizado = matriz_quantizacao * np.round(bloco_dct / matriz_quantizacao)
     return bloco_quantizado
 
-def quantizacao_blocos(blocos_dct, matriz_quantizacao):
+def quantizacao_blocos(blocos_dct):
+    matriz_quantizacao = cria_matriz_quantizacao()
     blocos_quantizados = []
     for bloco_dct in blocos_dct:
         bloco_quantizado = quantizacao(bloco_dct, matriz_quantizacao)
         blocos_quantizados.append(bloco_quantizado)
     return blocos_quantizados
 
-def zig_zag_scan(blocos_quantizados):
-    sequencias = []
-    for bloco in blocos_quantizados:
-        sequencia = []
-        for s in range(15):
-            if s % 2 == 0:
-                for i in range(s + 1):
-                    j = s - i
-                    if i < 8 and j < 8:
-                        sequencia.append(bloco[i, j])
-            else:
-                for i in range(s + 1):
-                    j = s - i
-                    if j < 8 and i < 8:
-                        sequencia.append(bloco[j, i])
-        sequencias.append(sequencia)
-    return sequencias   
+def DCT_inversa_matricial(blocos_dct):
+    N = 8
+    matriz_DCT = cria_matriz_transformacao_DCT()
+    blocos_reconstruidos = []
+    for bloco_dct in blocos_dct:
+        bloco_reconstruido = np.round(np.dot(np.dot(matriz_DCT.T, bloco_dct), matriz_DCT))
+        blocos_reconstruidos.append(bloco_reconstruido)
+    return blocos_reconstruidos
 
-def
+ALTURA_IMG = 8  
+LARGURA_IMG = 8
 
-ALTURA_IMG = 128
-LARGURA_IMG = 128
-
-matriz = [
-    [16, 11, 10, 16, 24, 40, 51, 61],
-    [12, 12, 14, 19, 26, 58, 60, 55],
-    [14, 13, 16, 24, 40, 57, 69, 56],
-    [14, 17, 22, 29, 51, 87, 80, 62],
-    [18, 22, 37, 56, 68, 109, 103, 77],
-    [24, 35, 55, 64, 81, 104, 113, 92],
-    [49, 64, 78, 87, 103, 121, 120, 101],
-    [72, 92, 95, 98, 112, 100, 103, 99]
-]
-
-C = [
-    [0, 1, 5, 6, 14, 15, 27, 28],
-    [2, 4, 7, 13, 16, 26, 29, 42],
-    [3, 8, 12, 17, 25, 30, 41, 43],
-    [9, 11, 18, 24, 31, 40, 44, 53],
-    [10, 19, 23, 32, 39, 45, 52, 54],
-    [20, 22, 33, 38, 46, 51, 55, 60],
-    [21, 34, 37, 47, 50, 56, 59, 61],
-    [35, 36, 48, 49, 57, 58, 62, 63]
-]
-
-matriz_grad = criar_matriz_gradiente(ALTURA_IMG, LARGURA_IMG)
+matriz_grad = obter_matriz_exemplo()
 
 print(matriz_grad)
 
-matriz_grad = level_shift(matriz_grad)
-
-print(matriz_grad)
+visualizar_matriz(matriz_grad)
 
 blocos = criar_blocos_8x8(matriz_grad)
 
 print(blocos)
 
-blocos_dct = transformada_DCT_blocos(blocos)
+blocos_dct_matricial = DCT_matricial(blocos)
 
-print(blocos_dct)
+imprime_matriz(blocos_dct_matricial)
 
-blocos_quantizados = quantizacao_blocos(blocos_dct, np.array(matriz))
+blocos_quantizados = quantizacao_blocos(blocos_dct_matricial)
 
-print(blocos_quantizados)
+imprime_matriz(blocos_quantizados)
+
+blocos_reconstruidos = DCT_inversa_matricial(blocos_quantizados)
+
+imprime_matriz(blocos_reconstruidos)
+
+matriz_final = reconstruir_matriz_de_blocos(blocos_reconstruidos, ALTURA_IMG, LARGURA_IMG)
+
+print(matriz_final)
+
+visualizar_matriz(matriz_final)
