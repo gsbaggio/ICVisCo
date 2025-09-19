@@ -125,8 +125,12 @@ def compress(model, input_file, output_file,
              rd_parameter=None, rd_parameter_tolerance=None,
              target_bpp=None, bpp_strict=False):
   """Compresses a PNG file to a TFCI file."""
+
   if not output_file:
     output_file = input_file + ".tfci"
+
+  output_file = "files/compressed/" + output_file
+  input_file = "files/original/" + input_file
 
   # Load image.
   input_image = read_png(input_file)
@@ -189,6 +193,10 @@ def decompress(input_file, output_file):
   """Decompresses a TFCI file and writes a PNG file."""
   if not output_file:
     output_file = input_file + ".png"
+
+  output_file = "files/decompressed/" + output_file
+  input_file = "files/compressed/" + input_file
+  
   with tf.io.gfile.GFile(input_file, "rb") as f:
     packed = tfc.PackedTensors(f.read())
   receiver = instantiate_model_signature(packed.model, "receiver")
@@ -364,6 +372,12 @@ def main(args):
   global URL_PREFIX, METAGRAPH_CACHE
   URL_PREFIX = args.url_prefix
   METAGRAPH_CACHE = args.metagraph_cache
+
+  if(args.input_file == "none"):
+    args.input_file = "roteador.png"
+    for item in os.listdir("files/original/"):
+      print(item)
+      
 
   # Invoke subcommand.
   if args.command == "compress":
