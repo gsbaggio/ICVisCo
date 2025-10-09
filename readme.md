@@ -20,7 +20,7 @@ python tfci.py compress hific-mi imagem.png --base_folder files/hific
 
 ## DECOMPRESSÃO ##
 
-
+./decompress_gpu.sh files/hific hific-mi none
 
 # Descomprimir especificando modelo
 python tfci.py decompress none --base_folder files/hific --model_folder hific-mi
