@@ -154,7 +154,7 @@ class LPIPSCalculator:
         try:
             # Força CPU se use_gpu=False, ou detecta GPU se use_gpu=True
             if not self.use_gpu:
-                print("💻 Forçando uso de CPU...")
+                print("Forçando uso de CPU...")
                 # Desabilita completamente a GPU
                 import os
                 os.environ['CUDA_VISIBLE_DEVICES'] = ''
@@ -168,14 +168,14 @@ class LPIPSCalculator:
                 actual_use_gpu = gpu_available
                 
                 if actual_use_gpu:
-                    print("🚀 Inicializando LPIPS com GPU...")
+                    print("Inicializando LPIPS com GPU...")
                     # Configuração otimizada para GPU
                     config = tf.ConfigProto()
                     config.gpu_options.allow_growth = True
                     config.gpu_options.per_process_gpu_memory_fraction = 0.7
                     config.allow_soft_placement = True
                 else:
-                    print("💻 GPU não disponível, usando CPU...")
+                    print("GPU não disponível, usando CPU...")
                     # Configuração para CPU
                     config = tf.ConfigProto()
                     config.allow_soft_placement = True
@@ -198,14 +198,14 @@ class LPIPSCalculator:
             self._initialized = True
             self.use_gpu = actual_use_gpu  # Atualiza o estado real
             device_type = "GPU" if actual_use_gpu else "CPU"
-            print(f"✅ LPIPS inicializado com sucesso ({device_type})")
+            print(f"LPIPS inicializado com sucesso ({device_type})")
             return True
             
         except Exception as e:
-            print(f"❌ Erro inicializando LPIPS: {e}")
+            print(f"Erro inicializando LPIPS: {e}")
             # Tenta fallback para CPU se falhou com GPU
             if self.use_gpu:
-                print("🔄 Tentando fallback para CPU...")
+                print("Tentando fallback para CPU...")
                 self.use_gpu = False
                 tf.reset_default_graph()
                 return self._initialize()
@@ -277,7 +277,7 @@ class LPIPS360Calculator:
         try:
             # Força CPU se use_gpu=False, ou detecta GPU se use_gpu=True
             if not self.use_gpu:
-                print("💻 Forçando uso de CPU para LPIPS 360...")
+                print("Forçando uso de CPU para LPIPS 360...")
                 # Desabilita completamente a GPU
                 import os
                 os.environ['CUDA_VISIBLE_DEVICES'] = ''
@@ -291,14 +291,14 @@ class LPIPS360Calculator:
                 actual_use_gpu = gpu_available
                 
                 if actual_use_gpu:
-                    print("🚀 Inicializando LPIPS 360 com GPU...")
+                    print("Inicializando LPIPS 360 com GPU...")
                     # Configuração otimizada para GPU
                     config = tf.ConfigProto()
                     config.gpu_options.allow_growth = True
                     config.gpu_options.per_process_gpu_memory_fraction = 0.7
                     config.allow_soft_placement = True
                 else:
-                    print("💻 GPU não disponível, usando CPU para LPIPS 360...")
+                    print("GPU não disponível, usando CPU para LPIPS 360...")
                     # Configuração para CPU
                     config = tf.ConfigProto()
                     config.allow_soft_placement = True
@@ -328,18 +328,18 @@ class LPIPS360Calculator:
                 self._initialized = True
                 self.use_gpu = actual_use_gpu
                 device_type = "GPU" if actual_use_gpu else "CPU"
-                print(f"✅ LPIPS 360 inicializado com sucesso ({device_type}) - Tipo: {self.latitude_weight_type}, Peso polar: {self.pole_weight}")
+                print(f"LPIPS 360 inicializado com sucesso ({device_type}) - Tipo: {self.latitude_weight_type}, Peso polar: {self.pole_weight}")
                 return True
                 
             except ImportError:
-                print("❌ Erro: simple_lpips360.py não encontrado.")
+                print("Erro: simple_lpips360.py não encontrado.")
                 return False
             
         except Exception as e:
-            print(f"❌ Erro inicializando LPIPS 360: {e}")
+            print(f"Erro inicializando LPIPS 360: {e}")
             # Tenta fallback para CPU se falhou com GPU
             if self.use_gpu:
-                print("🔄 Tentando fallback para CPU...")
+                print("Tentando fallback para CPU...")
                 self.use_gpu = False
                 tf.reset_default_graph()
                 return self._initialize()
@@ -658,12 +658,11 @@ def plot_compression_analysis(all_results, metrics=['psnr'], output_dir=None):
         axes = [axes]
     
     colors = ['red', 'blue', 'green', 'orange', 'purple', 'brown']
-    markers = ['o', 's', '^', 'D', 'v', '<']
     
     for idx, metric in enumerate(metrics):
         ax = axes[idx]
         
-        # Configurações específicas por métrica (movido para fora do loop)
+        # Configurações específicas por métrica
         if metric == 'psnr':
             ylabel = 'PSNR (dB)'
             title = 'Rate-Distortion: BPP vs PSNR'
@@ -682,32 +681,36 @@ def plot_compression_analysis(all_results, metrics=['psnr'], output_dir=None):
                 continue
                 
             color = colors[i % len(colors)]
-            marker = markers[i % len(markers)]
             
             bpp_mean = np.mean(result['bpp_values'])
             
             if metric == 'psnr' and result['psnr_values']:
                 metric_mean = np.mean(result['psnr_values'])
                 metric_std = np.std(result['psnr_values'])
+                metric_label = f'{result["method"]} ({metric_mean:.2f} dB)'
             elif metric == 'lpips' and result['lpips_values']:
                 metric_mean = np.mean(result['lpips_values'])
                 metric_std = np.std(result['lpips_values'])
+                metric_label = f'{result["method"]} ({metric_mean:.4f})'
             elif metric == 'lpips360' and result['lpips360_values']:
                 metric_mean = np.mean(result['lpips360_values'])
                 metric_std = np.std(result['lpips360_values'])
+                metric_label = f'{result["method"]} ({metric_mean:.4f})'
             else:
                 continue
             
-            # Plot pontos individuais
+            # Plot pontos individuais - sempre círculos com cores diferentes
             ax.scatter(result['bpp_values'], 
                       result[f'{metric}_values'],
-                      c=color, marker=marker, alpha=0.6, s=50)
+                      c=color, marker='o', alpha=0.6, s=50)
             
-            # Plot ponto médio com barra de erro
+            # Plot ponto médio com barra de erro (sem label para evitar duplicação)
             ax.errorbar(bpp_mean, metric_mean, yerr=metric_std, 
-                       fmt=marker, color=color, markersize=10, 
-                       capsize=5, capthick=2, linewidth=2,
-                       label=f'{result["method"]} (avg)')
+                       fmt='o', color=color, markersize=10, 
+                       capsize=5, capthick=2, linewidth=2)
+            
+            # Adiciona ponto para a legenda usando scatter (renderiza melhor os círculos)
+            ax.scatter([], [], c=color, marker='o', s=100, label=metric_label)
         
         ax.set_xlabel('BPP (bits per pixel)')
         ax.set_ylabel(ylabel)
@@ -752,14 +755,14 @@ def main():
     # Determina se deve usar GPU
     use_gpu = args.use_gpu and not args.force_cpu
     if args.force_cpu:
-        print("🔒 Forçando uso de CPU (GPU desabilitada)")
+        print("Forçando uso de CPU (GPU desabilitada)")
         # Desabilita GPU globalmente
         import os
         os.environ['CUDA_VISIBLE_DEVICES'] = ''
     elif use_gpu:
-        print("🚀 Tentando usar GPU se disponível")
+        print("Tentando usar GPU se disponível")
     else:
-        print("💻 Usando CPU (padrão)")
+        print("Usando CPU (padrão)")
     
     all_results = []
     
