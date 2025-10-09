@@ -1,0 +1,14 @@
+# 1. Análise básica
+python simple_rd_plot.py files
+
+# 2. Análise com salvamento
+python simple_rd_plot.py files --save_plot example_rd.png --save_data example_data.json
+
+# 3. Análise específica do HiFiC 360
+python simple_rd_plot.py files/hific-360 --save_plot hific360_analysis.png
+
+# 4. Comparar apenas JPEG
+python simple_rd_plot.py files/jpeg --save_plot jpeg_baseline.png
+
+# 5. Análise completa com múltiplas métricas (se disponível)
+python plot_rd_curves.py --base_dir files --metrics psnr mse --save_plot full_analysis.png
