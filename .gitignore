@@ -1,0 +1,14 @@
+HiFiC360/models/files/
+
+# Outras regras comuns (opcional)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.coverage
+.pytest_cache/
+*.egg-info/
+.vscode/
+.idea/
