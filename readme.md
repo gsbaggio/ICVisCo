@@ -1,6 +1,6 @@
 Alguns programas que quero testar para compressão de imagens
 
-## COMPRESSÃO ##
+## COMPRESSÃO 
 
 # Comprimir todas as imagens em files/hific/hific-mi/original/ (GPU)
 
@@ -18,7 +18,7 @@ python tfci.py compress hific-mi imagem.png --base_folder files/hific
 
 
 
-## DECOMPRESSÃO ##
+## DECOMPRESSÃO 
 
 ./decompress_gpu.sh files/hific hific-mi none
 
