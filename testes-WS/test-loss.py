@@ -54,7 +54,7 @@ def WSSSIM(img1, img2, K1 = .01, K2 = .03, L = 255):
     return mssim
 
 
-def WSPSNR(img1, img2, max = 255.):
+def WSPSNR(img1, img2, max = 255.): # img1 e img2 devem ter shape hx2h e ser em grayscale; max eh o maximo valor possivel em img1 e img2 (verificar se deve ser 1 ou 255)
    def __weights(height, width):
       phis = arange(height+1)*pi/height
       deltaTheta = 2*pi/width 
@@ -62,13 +62,12 @@ def WSPSNR(img1, img2, max = 255.):
       return repeat(column[:, newaxis], width, 1)
 
    w = __weights(*img1.shape)
-   wmse = sum((img1-img2)**2*w)/(4*pi)
+   # from matplotlib import pyplot as plt; plt.imshow(w); plt.show()
+   wmse = sum((img1-img2)**2*w)/(4*pi) # É ASSIM MESMO
    return 10*log10(max**2/wmse)
 
 
-# ----------------------------------------------------------------------------------------------
-# VERSÕES OTIMIZADAS PARA RGB
-# ----------------------------------------------------------------------------------------------
+# ----------------- novo
 
 def _compute_weights(height, width):
     """
