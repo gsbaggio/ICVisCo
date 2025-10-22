@@ -69,115 +69,61 @@ def WSPSNR(img1, img2, max = 255.): # img1 e img2 devem ter shape hx2h e ser em 
 
 # ----------------- novo
 
-def _compute_weights(height, width):
-    """
-    Calcula os pesos esféricos uma única vez (função auxiliar otimizada).
-    Utiliza operações vetorizadas do NumPy.
-    """
-    phis = arange(height+1) * pi / height
-    deltaTheta = 2 * pi / width 
-    # Vetorização: calcula todos os valores de uma vez
+def weights(height, width): # calculo da matriz de pesos, otimizada
+    phis = arange(height+1)*pi/height
+    deltaTheta = 2*pi/width
     column = deltaTheta * (-cos(phis[1:]) + cos(phis[:-1]))
-    return repeat(column[:, newaxis], width, axis=1)
+    return repeat(column[:, newaxis], width, 1)
 
-
-def WSMSE_RGB(img1, img2):
-    """
-    Calcula o Weighted Spherical Mean Squared Error para imagens RGB.
-    OTIMIZADO: Processa todos os canais de uma vez usando operações vetorizadas.
-    
-    Args:
-        img1: Imagem original RGB com shape (height, width, 3), valores em [0, 255]
-        img2: Imagem reconstruída RGB com shape (height, width, 3), valores em [0, 255]
-    
-    Returns:
-        WS-MSE médio dos 3 canais
-    """
+def WSMSE_RGB(img1, img2): # cálculo em 3 canais, otimizada
     img1 = float64(img1)
     img2 = float64(img2)
     
     height, width = img1.shape[0], img1.shape[1]
     
-    # Calcula os pesos apenas uma vez
-    w = _compute_weights(height, width)
+    # calcula os pesos e expande os pesos para shape (height, width, 1)
+    w = weights(height, width)
+    w_expanded = w[:, :, newaxis] # (height, width, 1)
     
-    # Expande os pesos para shape (height, width, 1) para broadcasting
-    w_expanded = w[:, :, newaxis]
-    
-    # Calcula WS-MSE para todos os canais de uma vez usando broadcasting
     # (img1 - img2)^2 tem shape (height, width, 3)
     # w_expanded tem shape (height, width, 1)
-    # A multiplicação faz broadcast automaticamente
+    # a multiplicação faz broadcast automaticamente
     squared_diff = (img1 - img2) ** 2
     weighted_squared_diff = squared_diff * w_expanded
     
-    # Soma sobre altura e largura, mantendo os canais separados
-    wmse_per_channel = sum(sum(weighted_squared_diff, axis=0), axis=0) / (4 * pi)
-    
-    # Retorna a média dos 3 canais
-    return mean(wmse_per_channel)
+    # soma sobre altura e largura, mantendo os canais separados
+    r = 1
+    wmse_three_channel = sum(sum(weighted_squared_diff, 0), 0) / (4 * pi * r)
 
+    # média dos 3 canais
+    return mean(wmse_three_channel)
 
-def WSPSNR_RGB(img1, img2, max_val=255.):
-    """
-    Calcula o Weighted Spherical Peak Signal-to-Noise Ratio para imagens RGB.
-    OTIMIZADO: Processa todos os canais de uma vez usando operações vetorizadas.
-    
-    Args:
-        img1: Imagem original RGB com shape (height, width, 3), valores em [0, 255]
-        img2: Imagem reconstruída RGB com shape (height, width, 3), valores em [0, 255]
-        max_val: Valor máximo possível dos pixels (255 para imagens 8-bit)
-    
-    Returns:
-        WS-PSNR médio dos 3 canais
-    """
+def WSPSNR_RGB(img1, img2, max_val=255.): # cálculo em 3 canais, otimizada
     img1 = float64(img1)
     img2 = float64(img2)
     
     height, width = img1.shape[0], img1.shape[1]
+
+    # calcula os pesos e expande os pesos para shape (height, width, 1)
+    w = weights(height, width)
+    w_expanded = w[:, :, newaxis] # (height, width, 1)
     
-    # Calcula os pesos apenas uma vez
-    w = _compute_weights(height, width)
-    w_expanded = w[:, :, newaxis]
-    
-    # Calcula WS-MSE para todos os canais de uma vez
+    # calcula o WS-MSE para todos os canais (olhar o código WSMSE.py)
     squared_diff = (img1 - img2) ** 2
     weighted_squared_diff = squared_diff * w_expanded
-    wmse_per_channel = sum(sum(weighted_squared_diff, axis=0), axis=0) / (4 * pi)
-    
-    # Calcula PSNR para cada canal (vetorizado)
-    # Evita divisão por zero
-    wmse_per_channel = where(wmse_per_channel == 0, 1e-10, wmse_per_channel)
-    wspsnr_per_channel = 10 * log10(max_val**2 / wmse_per_channel)
-    
-    return mean(wspsnr_per_channel)
+    wmse_three_channel = sum(sum(weighted_squared_diff, 0), 0) / (4 * pi)
 
+    # calcula PSNR para cada canal
+    wmse_three_channel = where(wmse_three_channel == 0, 1e-10, wmse_three_channel) # evita divisão por zero, pois iria para infinito (ainda fica com um valor muito alto)
+    wspsnr_three_channel = 10 * log10(max_val**2 / wmse_three_channel)
+
+    return mean(wspsnr_three_channel)
 
 def WSSSIM_RGB(img1, img2, K1=.01, K2=.03, L=255):
-    """
-    Calcula o Weighted Spherical Structural Similarity Index para imagens RGB.
-    OTIMIZADO: Reduz chamadas de convolução usando operações em múltiplos canais.
-    
-    Args:
-        img1: Imagem original RGB com shape (height, width, 3), valores em [0, 255]
-        img2: Imagem reconstruída RGB com shape (height, width, 3), valores em [0, 255]
-        K1, K2: Constantes para estabilidade numérica
-        L: Faixa dinâmica dos valores de pixel (255 para 8-bit)
-    
-    Returns:
-        WS-SSIM médio dos 3 canais
-    """
     def __fspecial_gauss(size, sigma):
         x, y = mgrid[-size//2 + 1:size//2 + 1, -size//2 + 1:size//2 + 1]
         g = exp(-((x**2 + y**2)/(2.0*sigma**2)))
         return g/g.sum()
-
-    def __weights(height, width):
-        deltaTheta = 2*pi/width 
-        # Otimizado: usa arange e vetorização
-        j = arange(height)
-        column = cos(deltaTheta * (j - height/2. + 0.5))
-        return repeat(column[:, newaxis], width, axis=1)
 
     img1 = float64(img1)
     img2 = float64(img2)
@@ -191,46 +137,36 @@ def WSSSIM_RGB(img1, img2, K1=.01, K2=.03, L=255):
     C1 = (K1*L)**2
     C2 = (K2*L)**2
     
-    # Pré-calcula os pesos (apenas uma vez)
     height, width = img1.shape[0], img1.shape[1]
-    W = __weights(height, width)
+    W = weights(height, width)
     Wi = signal.convolve2d(W, window2, 'valid')
     
-    # Normalização dos pesos (constante para todos os canais)
     weight_sum = sum(Wi)
     
-    # Processa todos os canais em um loop otimizado
     wsssim_channels = zeros(3)
     
     for c in range(3):
         channel1 = img1[:, :, c]
         channel2 = img2[:, :, c]
         
-        # Otimização: combina operações similares
-        # Calcula médias
         mu1 = signal.convolve2d(channel1, window, 'valid')
         mu2 = signal.convolve2d(channel2, window, 'valid')
         
-        # Calcula produtos (reutiliza resultados)
         mu1_sq = mu1 * mu1
         mu2_sq = mu2 * mu2
         mu1_mu2 = mu1 * mu2
         
-        # Calcula variâncias e covariância (minimiza convoluções)
         sigma1_sq = signal.convolve2d(channel1 * channel1, window, 'valid') - mu1_sq
         sigma2_sq = signal.convolve2d(channel2 * channel2, window, 'valid') - mu2_sq
         sigma12 = signal.convolve2d(channel1 * channel2, window, 'valid') - mu1_mu2
         
-        # Calcula SSIM map com pesos
         numerator = (2*mu1_mu2 + C1) * (2*sigma12 + C2)
         denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
         ssim_map = (numerator / denominator) * Wi
         
-        # Calcula média ponderada
         wsssim_channels[c] = sum(ssim_map) / weight_sum
     
     return mean(wsssim_channels)
-
 
 def load_image(image_path):
     """
