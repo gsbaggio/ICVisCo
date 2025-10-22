@@ -1,4 +1,6 @@
 HiFiC360/models/files/
+HiFiC360/models/ckpts/
+HiFiC360/models/evaluation_results/
 
 # Outras regras comuns (opcional)
 __pycache__/

@@ -26,7 +26,6 @@ from hific import helpers
 from hific.helpers import ModelMode
 from hific.helpers import ModelType
 from hific.helpers import TFDSArguments
-from hific.lpips_360 import LPIPS360Loss, LPIPS360LossFactory
 
 
 # How many dataset preprocessing processes to use.
@@ -134,10 +133,7 @@ class HiFiC(object):
                mode: ModelMode,
                lpips_weight_path=None,
                auto_encoder_ckpt_dir=None,
-               create_image_summaries=True,
-               use_lpips_360=False,
-               latitude_weight_type='cosine',
-               pole_weight=0.5):
+               create_image_summaries=True):
     """Instantiate model.
 
     Args:
@@ -149,17 +145,11 @@ class HiFiC(object):
         model from latest checkpoint in this folder.
       create_image_summaries: Whether to create image summaries. Turn off to
         save disk space.
-      use_lpips_360: Whether to use LPIPS loss adapted for 360-degree images.
-      latitude_weight_type: Type of latitude weighting ('cosine', 'linear', 'quadratic').
-      pole_weight: Weight factor for polar regions (0.0 to 1.0).
     """
     self._mode = mode
     self._config = config
     self._model_type = config.model_type
     self._create_image_summaries = create_image_summaries
-    self._use_lpips_360 = use_lpips_360
-    self._latitude_weight_type = latitude_weight_type
-    self._pole_weight = pole_weight
 
     if not isinstance(self._model_type, ModelType):
       raise ValueError("Invalid model_type: [{}]".format(
@@ -314,7 +304,16 @@ class HiFiC(object):
         tf.logging.info(
             f"Using images_glob={images_glob} ({len(images)} images)")
         filenames = tf.data.Dataset.from_tensor_slices(images)
-        dataset = filenames.map(lambda x: tf.image.decode_png(tf.read_file(x)))
+        
+        def _decode_image(filename):
+          """Decodifica imagem (suporta PNG, JPG, JPEG)."""
+          image_string = tf.read_file(filename)
+          # tf.image.decode_image detecta automaticamente o formato
+          image = tf.image.decode_image(image_string, channels=3)
+          image.set_shape([None, None, 3])
+          return image
+        
+        dataset = filenames.map(_decode_image)
       else:
         tf.logging.info(f"Using TFDS={tfds_arguments}")
         builder = tfds.builder(
@@ -400,15 +399,7 @@ class HiFiC(object):
     self.build_transforms()
 
     if self.training:
-      if self._use_lpips_360:
-        tf.logging.info("Using LPIPS 360 loss with latitude weighting...")
-        self._lpips_loss = LPIPS360Loss(
-            self._lpips_weight_path,
-            latitude_weight_type=self._latitude_weight_type,
-            pole_weight=self._pole_weight)
-      else:
-        tf.logging.info("Using standard LPIPS loss...")
-        self._lpips_loss = LPIPSLoss(self._lpips_weight_path)
+      self._lpips_loss = LPIPSLoss(self._lpips_weight_path)
       self._lpips_loss_weight = self._config.loss_config.lpips_weight
 
     if self._setup_discriminator:
@@ -865,14 +856,14 @@ class LPIPSLoss(object):
       def _imports_graph_def():
         tf.graph_util.import_graph_def(graph_def, name="")
 
-      wrapped_import = tf.compat.v1.wrap_function(_imports_graph_def, [])
+      wrapped_import = tf.wrap_function(_imports_graph_def, [])
       import_graph = wrapped_import.graph
       return wrapped_import.prune(
           tf.nest.map_structure(import_graph.as_graph_element, inputs),
           tf.nest.map_structure(import_graph.as_graph_element, outputs))
 
     # Pack LPIPS network into a tf function
-    graph_def = tf.compat.v1.GraphDef()
+    graph_def = tf.GraphDef()
     with open(weight_path, "rb") as f:
       graph_def.ParseFromString(f.read())
     self._lpips_func = tf.function(
