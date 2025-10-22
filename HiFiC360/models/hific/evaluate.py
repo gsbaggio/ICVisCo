@@ -43,18 +43,48 @@ def eval_trained_model(config_name,
                        out_dir,
                        images_glob,
                        tfds_arguments: helpers.TFDSArguments,
+                       local_image_dir=None,
                        max_images=None):
   """Evaluate a trained model."""
   config = configs.get_config(config_name)
   hific = model.HiFiC(config, helpers.ModelMode.EVALUATION)
 
-  # Note: Automatically uses the validation split for TFDS.
-  dataset = hific.build_input(
-      batch_size=1,
-      crop_size=None,
-      images_glob=images_glob,
-      tfds_arguments=tfds_arguments)
-  image_names = get_image_names(images_glob)
+  import os
+  os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+
+  # Se local_image_dir for especificado, usar imagens locais ao invés de TFDS
+  if local_image_dir:
+    # Suporta PNG, JPG e JPEG
+    import glob as glob_module
+    png_images = glob_module.glob(f"{local_image_dir}/*.png")
+    jpg_images = glob_module.glob(f"{local_image_dir}/*.jpg")
+    jpeg_images = glob_module.glob(f"{local_image_dir}/*.jpeg")
+    all_images = png_images + jpg_images + jpeg_images
+    
+    if not all_images:
+      raise ValueError(f'No images found in {local_image_dir}. '
+                      'Make sure there are *.png, *.jpg, or *.jpeg files.')
+    
+    tf.logging.info(f'Found {len(all_images)} images in {local_image_dir}')
+    tf.logging.info(f'  PNG: {len(png_images)}, JPG: {len(jpg_images)}, '
+                   f'JPEG: {len(jpeg_images)}')
+    
+    # Usar padrão que pega todos os formatos
+    images_glob = f"{local_image_dir}/*.[pjpJ][npNP][gGgE]*"
+    dataset = hific.build_input(
+        batch_size=1,
+        crop_size=None,
+        images_glob=images_glob)
+    image_names = get_image_names(images_glob)
+  else:
+    # Note: Automatically uses the validation split for TFDS.
+    dataset = hific.build_input(
+        batch_size=1,
+        crop_size=None,
+        images_glob=images_glob,
+        tfds_arguments=tfds_arguments)
+    image_names = get_image_names(images_glob)
   iterator = tf.data.make_one_shot_iterator(dataset)
   get_next_image = iterator.get_next()
   input_image = get_next_image['input_image']
@@ -143,6 +173,15 @@ def parse_args(argv):
   parser.add_argument('--out_dir', required=True, help='Where to save outputs.')
 
   parser.add_argument('--images_glob', help='If given, use TODO')
+  
+  parser.add_argument('--local_image_dir',
+                      help=('Path to local directory containing images to evaluate '
+                            '(*.png, *.jpg, *.jpeg). If provided, this will be used '
+                            'instead of TFDS dataset. Example: my_images/validation'))
+  
+  parser.add_argument('--max_images', type=int,
+                      help='Maximum number of images to evaluate. If not specified, '
+                           'evaluates all images.')
 
   helpers.add_tfds_arguments(parser)
 
@@ -153,7 +192,9 @@ def parse_args(argv):
 def main(args):
   eval_trained_model(args.config, args.ckpt_dir, args.out_dir,
                      args.images_glob,
-                     helpers.parse_tfds_arguments(args))
+                     helpers.parse_tfds_arguments(args),
+                     args.local_image_dir,
+                     args.max_images)
 
 
 if __name__ == '__main__':

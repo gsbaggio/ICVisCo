@@ -45,3 +45,34 @@ python compression_analysis.py --base_dir files --methods hific --metrics psnr l
 
 # LPIPS 360 com peso quadrático
 python compression_analysis.py --base_dir files --methods hific --metrics lpips360 --force_cpu --lpips360_weight_type quadratic --lpips360_pole_weight 0.8
+
+
+            primeiro passo:
+
+            python -m hific.train \
+            --config mselpips \
+            --ckpt_dir ckpts/mse_lpips \
+            --num_steps 1M \
+            --local_image_dir tensorflow_datasets/minhas_imagens \
+            --batch_size 8 \
+            --crop_size 256
+            ```
+
+            #### Para treinar o modelo GAN completo (segundo passo):
+
+            ```bash
+            cd /home/gabrielbaggio/Documentos/Trabalhos/ICVisCo/HiFiC360/models
+
+            python -m hific.train \
+            --config hific \
+            --ckpt_dir ckpts/hific \
+            --init_autoencoder_from_ckpt_dir ckpts/mse_lpips \
+            --num_steps 1M \
+            --local_image_dir tensorflow_datasets/minhas_imagens \
+            --batch_size 8 \
+            --crop_size 256
+            ```
+
+avaliar o modelo:
+
+python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../../../../../tensorflow_datasets/SUN360-200
