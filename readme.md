@@ -49,13 +49,7 @@ python compression_analysis.py --base_dir files --methods hific --metrics lpips3
 
             primeiro passo:
 
-            python -m hific.train \
-            --config mselpips \
-            --ckpt_dir ckpts/mse_lpips \
-            --num_steps 1M \
-            --local_image_dir tensorflow_datasets/minhas_imagens \
-            --batch_size 8 \
-            --crop_size 256
+            python -m hific.train --config mselpips --ckpt_dir ckpts/mse_lpips_gpu --num_steps 1k --local_image_dir ../../../../../tensorflow_datasets/SUN360-200
             ```
 
             #### Para treinar o modelo GAN completo (segundo passo):
@@ -68,9 +62,7 @@ python compression_analysis.py --base_dir files --methods hific --metrics lpips3
             --ckpt_dir ckpts/hific \
             --init_autoencoder_from_ckpt_dir ckpts/mse_lpips \
             --num_steps 1M \
-            --local_image_dir tensorflow_datasets/minhas_imagens \
-            --batch_size 8 \
-            --crop_size 256
+            --local_image_dir tensorflow_datasets/minhas_imagens
             ```
 
 avaliar o modelo:
