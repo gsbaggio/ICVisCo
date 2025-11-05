@@ -42,6 +42,9 @@ def train(config_name, ckpt_dir, num_steps: int, auto_encoder_ckpt_dir,
   hific = model.HiFiC(config, helpers.ModelMode.TRAINING, lpips_weight_path,
                       auto_encoder_ckpt_dir, create_image_summaries)
   
+  # import os
+  # os.environ['CUDA_VISIBLE_DEVICES'] = ''
+  
   # Se local_image_dir for especificado, usar imagens locais ao invés de TFDS
   if local_image_dir:
     # Suporta PNG, JPG e JPEG

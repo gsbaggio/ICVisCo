@@ -68,3 +68,12 @@ python compression_analysis.py --base_dir files --methods hific --metrics lpips3
 avaliar o modelo:
 
 python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../../../../../tensorflow_datasets/SUN360-200
+
+
+DOCKER:
+
+Buildar
+docker build -t hific-360-env .
+
+Rodar
+docker run --gpus all -it --rm -v "$(pwd)":/app hific-360-env
