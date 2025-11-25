@@ -47,33 +47,31 @@ python compression_analysis.py --base_dir files --methods hific --metrics psnr l
 python compression_analysis.py --base_dir files --methods hific --metrics lpips360 --force_cpu --lpips360_weight_type quadratic --lpips360_pole_weight 0.8
 
 
-            primeiro passo:
+primeiro passo:
 
-            python -m hific.train --config mselpips --ckpt_dir ckpts/mse_lpips_gpu --num_steps 1k --local_image_dir ../../../../../tensorflow_datasets/SUN360-200
-            ```
+python -m hific.train --config mselpips_lo --ckpt_dir ckpts/mse_lpips_lo_200k --num_steps 200k --local_image_dir ../SUN360/train
+            
+segundo passo:            
 
-            #### Para treinar o modelo GAN completo (segundo passo):
-
-            ```bash
-            cd /home/gabrielbaggio/Documentos/Trabalhos/ICVisCo/HiFiC360/models
-
-            python -m hific.train \
-            --config hific \
-            --ckpt_dir ckpts/hific \
-            --init_autoencoder_from_ckpt_dir ckpts/mse_lpips \
-            --num_steps 1M \
-            --local_image_dir tensorflow_datasets/minhas_imagens
-            ```
+python -m hific.train --config hific_lo --ckpt_dir ckpts/hific_mse_lpips_lo_200k --init_autoencoder_from_ckpt_dir ckpts/mse_lpips_lo_200k --num_steps 200k --local_image_dir ../SUN360/train
+            
 
 avaliar o modelo:
 
-python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../../../../../tensorflow_datasets/SUN360-200
+python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../SUN360/test
 
 
 DOCKER:
 
 Buildar
-docker build -t hific-360-env .
+SÓ USAR ESSE SE QUISER CRIAR NOVA IMAGEM -> docker build -t hific-360-env .
 
 Rodar
 docker run --gpus all -it --rm -v "$(pwd)":/app hific-360-env
+
+
+target low = 0.14
+target mid = 0.14
+target high = 0.14
+
+./train_all_models.sh

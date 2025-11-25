@@ -66,8 +66,13 @@ def WSPSNR(img1, img2, max = 255.): # img1 e img2 devem ter shape hx2h e ser em 
    wmse = sum((img1-img2)**2*w)/(4*pi) # É ASSIM MESMO
    return 10*log10(max**2/wmse)
 
-
 # ----------------- novo
+
+def weightsantigo(height, width):
+    phis = arange(height+1)*pi/height
+    deltaTheta = 2*pi/width 
+    column = asarray([deltaTheta * (-cos(phis[j+1])+cos(phis[j])) for j in range(height)])
+    return repeat(column[:, newaxis], width, 1)
 
 def weights(height, width): # calculo da matriz de pesos, otimizada
     phis = arange(height+1)*pi/height
@@ -260,6 +265,9 @@ def main():
     except Exception as e:
         print(f"\nErro ao processar imagens: {e}")
         return 1
+    
+    # print(weightsnovo(5,8))
+    # print(weights(5,8))
     
     return 0
 

@@ -49,8 +49,8 @@ def eval_trained_model(config_name,
   config = configs.get_config(config_name)
   hific = model.HiFiC(config, helpers.ModelMode.EVALUATION)
 
-  import os
-  os.environ['CUDA_VISIBLE_DEVICES'] = ''
+  # import os
+  # os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
 
   # Se local_image_dir for especificado, usar imagens locais ao invés de TFDS

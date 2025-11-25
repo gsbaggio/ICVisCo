@@ -1,5 +1,6 @@
 from numpy import *
 from scipy import signal
+from PIL import Image
 
 def weights(height, width): # calculo da matriz de pesos, otimizada
     phis = arange(height+1)*pi/height
@@ -55,3 +56,8 @@ def WSSSIM_RGB(img1, img2, K1=.01, K2=.03, L=255):
         wsssim_channels[c] = sum(ssim_map) / weight_sum
     
     return mean(wsssim_channels)
+
+img1 = asarray(Image.open('original.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+img2 = asarray(Image.open('fake.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+
+print(WSSSIM_RGB(img1, img2))

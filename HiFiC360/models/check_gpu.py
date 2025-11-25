@@ -164,7 +164,7 @@ def suggest_fixes():
     print("   - Limite memória: config.gpu_options.per_process_gpu_memory_fraction = 0.7")
     
     print("\n4. Variáveis de ambiente úteis:")
-    print("   export CUDA_VISIBLE_DEVICES=0")
+    # print("   export CUDA_VISIBLE_DEVICES=0")
     print("   export TF_FORCE_GPU_ALLOW_GROWTH=true")
     print("   export CUDA_CACHE_DISABLE=1")
 

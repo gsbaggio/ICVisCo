@@ -1,4 +1,5 @@
 from numpy import *
+from PIL import Image
 
 def weights(height, width): # calculo da matriz de pesos, otimizada
     phis = arange(height+1)*pi/height
@@ -28,3 +29,8 @@ def WSMSE_RGB(img1, img2): # cálculo em 3 canais, otimizada
 
     # média dos 3 canais
     return mean(wmse_three_channel)
+
+img1 = asarray(Image.open('original.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+img2 = asarray(Image.open('fake.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+
+print(WSMSE_RGB(img1, img2))

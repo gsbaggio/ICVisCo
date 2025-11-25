@@ -1,4 +1,5 @@
 from numpy import *
+from PIL import Image
 
 def weights(height, width): # calculo da matriz de pesos, otimizada
     phis = arange(height+1)*pi/height
@@ -26,3 +27,8 @@ def WSPSNR_RGB(img1, img2, max_val=255.): # cálculo em 3 canais, otimizada
     wspsnr_three_channel = 10 * log10(max_val**2 / wmse_three_channel)
 
     return mean(wspsnr_three_channel)
+
+img1 = asarray(Image.open('origina.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+img2 = asarray(Image.open('fake.png').convert('RGB')) # shape precisa ser (altura, largura, 3) !!!
+
+print(WSPSNR_RGB(img1, img2))

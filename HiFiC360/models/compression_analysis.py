@@ -156,8 +156,8 @@ class LPIPSCalculator:
             if not self.use_gpu:
                 print("Forçando uso de CPU...")
                 # Desabilita completamente a GPU
-                import os
-                os.environ['CUDA_VISIBLE_DEVICES'] = ''
+                # import os
+                # os.environ['CUDA_VISIBLE_DEVICES'] = ''
                 # Configuração para CPU apenas
                 config = tf.ConfigProto()
                 config.allow_soft_placement = True
@@ -279,8 +279,8 @@ class LPIPS360Calculator:
             if not self.use_gpu:
                 print("Forçando uso de CPU para LPIPS 360...")
                 # Desabilita completamente a GPU
-                import os
-                os.environ['CUDA_VISIBLE_DEVICES'] = ''
+                # import os
+                # os.environ['CUDA_VISIBLE_DEVICES'] = ''
                 # Configuração para CPU apenas
                 config = tf.ConfigProto()
                 config.allow_soft_placement = True
@@ -757,8 +757,8 @@ def main():
     if args.force_cpu:
         print("Forçando uso de CPU (GPU desabilitada)")
         # Desabilita GPU globalmente
-        import os
-        os.environ['CUDA_VISIBLE_DEVICES'] = ''
+        # import os
+        # os.environ['CUDA_VISIBLE_DEVICES'] = ''
     elif use_gpu:
         print("Tentando usar GPU se disponível")
     else:

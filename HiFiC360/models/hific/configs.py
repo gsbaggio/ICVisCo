@@ -18,7 +18,8 @@ from hific import helpers
 
 
 _CONFIGS = {
-    'hific': helpers.Config(
+    # HiFiC variants used in the paper: Low, Mid, High target bitrates.
+    'hific_lo': helpers.Config(
         model_type=helpers.ModelType.COMPRESSION_GAN,
         lambda_schedule=helpers.Config(
             vals=[2., 1.],
@@ -29,24 +30,66 @@ _CONFIGS = {
             steps=[500000]),
         num_steps_disc=1,
         loss_config=helpers.Config(
-            # Constrain rate:
-            #   Loss = C * (1/lambda * R + CD * D) + CP * P
-            #       where
-            #          lambda = lambda_a if current_bpp > target
-            #                   lambda_b otherwise.
-            CP=0.1 * 1.5 ** 1,  # Sweep over 0.1 * 1.5 ** x
+            CP=0.1 * 1.5 ** 1,
             C=0.1 * 2. ** -5,
             CD=0.75,
-            target=0.14,  # This is $r_t$ in the paper.
+            target=0.14,  # HiFiCLo target (rt=0.14 in paper)
             lpips_weight=1.,
             target_schedule=helpers.Config(
-                vals=[0.20/0.14, 1.],  # Factor is independent of target.
+                vals=[0.20/0.14, 1.],
                 steps=[50000]),
             lmbda_a=0.1 * 2. ** -6,
             lmbda_b=0.1 * 2. ** 1,
-            )
-        ),
-    'mselpips': helpers.Config(
+        )
+    ),
+    'hific_mi': helpers.Config(
+        model_type=helpers.ModelType.COMPRESSION_GAN,
+        lambda_schedule=helpers.Config(
+            vals=[2., 1.],
+            steps=[50000]),
+        lr=1e-4,
+        lr_schedule=helpers.Config(
+            vals=[1., 0.1],
+            steps=[500000]),
+        num_steps_disc=1,
+        loss_config=helpers.Config(
+            CP=0.1 * 1.5 ** 2,
+            C=0.1 * 2. ** -5,
+            CD=0.75,
+            target=0.3,  # HiFiCMi target (rt=0.3 in paper)
+            lpips_weight=1.,
+            target_schedule=helpers.Config(
+                vals=[0.20/0.14, 1.],
+                steps=[50000]),
+            lmbda_a=0.1 * 2. ** -6,
+            lmbda_b=0.1 * 2. ** 1,
+        )
+    ),
+    'hific_hi': helpers.Config(
+        model_type=helpers.ModelType.COMPRESSION_GAN,
+        lambda_schedule=helpers.Config(
+            vals=[2., 1.],
+            steps=[50000]),
+        lr=1e-4,
+        lr_schedule=helpers.Config(
+            vals=[1., 0.1],
+            steps=[500000]),
+        num_steps_disc=1,
+        loss_config=helpers.Config(
+            CP=0.1 * 1.5 ** 3,
+            C=0.1 * 2. ** -5,
+            CD=0.75,
+            target=0.45,  # HiFiCHi target (rt=0.45 in paper)
+            lpips_weight=1.,
+            target_schedule=helpers.Config(
+                vals=[0.20/0.14, 1.],
+                steps=[50000]),
+            lmbda_a=0.1 * 2. ** -6,
+            lmbda_b=0.1 * 2. ** 1,
+        )
+    ),
+    # Baseline (no GAN) variants matching HiFiC targets used for initialization.
+    'mselpips_lo': helpers.Config(
         model_type=helpers.ModelType.COMPRESSION,
         lambda_schedule=helpers.Config(
             vals=[2., 1.],
@@ -57,23 +100,64 @@ _CONFIGS = {
             steps=[500000]),
         num_steps_disc=None,
         loss_config=helpers.Config(
-            # Constrain rate:
-            #   Loss = C * (1/lambda * R + CD * D) + CP * P
-            #       where
-            #          lambda = lambda_a if current_bpp > target
-            #                   lambda_b otherwise.
             CP=None,
             C=0.1 * 2. ** -5,
             CD=0.75,
-            target=0.14,  # This is $r_t$ in the paper.
+            target=0.14,
             lpips_weight=1.,
             target_schedule=helpers.Config(
-                vals=[0.20/0.14, 1.],  # Factor is independent of target.
+                vals=[0.20/0.14, 1.],
                 steps=[50000]),
             lmbda_a=0.1 * 2. ** -6,
             lmbda_b=0.1 * 2. ** 1,
-            )
         )
+    ),
+    'mselpips_mi': helpers.Config(
+        model_type=helpers.ModelType.COMPRESSION,
+        lambda_schedule=helpers.Config(
+            vals=[2., 1.],
+            steps=[50000]),
+        lr=1e-4,
+        lr_schedule=helpers.Config(
+            vals=[1., 0.1],
+            steps=[500000]),
+        num_steps_disc=None,
+        loss_config=helpers.Config(
+            CP=None,
+            C=0.1 * 2. ** -5,
+            CD=0.75,
+            target=0.3,
+            lpips_weight=1.,
+            target_schedule=helpers.Config(
+                vals=[0.20/0.14, 1.],
+                steps=[50000]),
+            lmbda_a=0.1 * 2. ** -6,
+            lmbda_b=0.1 * 2. ** 1,
+        )
+    ),
+    'mselpips_hi': helpers.Config(
+        model_type=helpers.ModelType.COMPRESSION,
+        lambda_schedule=helpers.Config(
+            vals=[2., 1.],
+            steps=[50000]),
+        lr=1e-4,
+        lr_schedule=helpers.Config(
+            vals=[1., 0.1],
+            steps=[500000]),
+        num_steps_disc=None,
+        loss_config=helpers.Config(
+            CP=None,
+            C=0.1 * 2. ** -5,
+            CD=0.75,
+            target=0.45,
+            lpips_weight=1.,
+            target_schedule=helpers.Config(
+                vals=[0.20/0.14, 1.],
+                steps=[50000]),
+            lmbda_a=0.1 * 2. ** -6,
+            lmbda_b=0.1 * 2. ** 1,
+        )
+    ),
 }
 
 
