@@ -58,7 +58,7 @@ python -m hific.train --config hific_lo --ckpt_dir ckpts/hific_mse_lpips_lo_200k
 
 avaliar o modelo:
 
-python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../SUN360/test
+python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../SUN360/test-10
 
 
 DOCKER:
