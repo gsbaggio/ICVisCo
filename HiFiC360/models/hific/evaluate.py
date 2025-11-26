@@ -25,6 +25,7 @@ import os
 import sys
 
 import numpy as np
+from scipy import signal
 from PIL import Image
 import tensorflow.compat.v1 as tf
 import tensorflow_compression as tfc
@@ -48,10 +49,6 @@ def eval_trained_model(config_name,
   """Evaluate a trained model."""
   config = configs.get_config(config_name)
   hific = model.HiFiC(config, helpers.ModelMode.EVALUATION)
-
-  # import os
-  # os.environ['CUDA_VISIBLE_DEVICES'] = ''
-
 
   # Se local_image_dir for especificado, usar imagens locais ao invés de TFDS
   if local_image_dir:
@@ -114,6 +111,11 @@ def eval_trained_model(config_name,
             bitstring, bitstring_np, num_pixels=h * w)
 
         metrics = {'psnr': get_psnr(inp_np, otp_np),
+                   'ws-psnr': get_ws_psnr(inp_np, otp_np),
+                   'ssim': get_ssim(inp_np, otp_np),
+                   'ws_ssim': get_ws_ssim(inp_np, otp_np),
+                   'mse': get_mse(inp_np, otp_np),
+                   'ws-mse': get_ws_mse(inp_np, otp_np),
                    'bpp_real': bpp}
 
         metrics_str = ' / '.join(f'{metric}: {value:.5f}'
@@ -146,12 +148,175 @@ def get_arithmetic_coding_bpp(bitstring, bitstring_np, num_pixels):
   packed.pack(tensors=bitstring, arrays=bitstring_np)
   return len(packed.string) * 8 / num_pixels
 
+def weights(height, width): # calculo da matriz de pesos, otimizada
+    phis = np.arange(height+1)*np.pi/height
+    deltaTheta = 2*np.pi/width
+    column = deltaTheta * (-np.cos(phis[1:]) + np.cos(phis[:-1]))
+    return np.repeat(column[:, np.newaxis], width, 1)
 
 def get_psnr(inp, otp):
   mse = np.mean(np.square(inp.astype(np.float32) - otp.astype(np.float32)))
   psnr = 20. * np.log10(255.) - 10. * np.log10(mse)
   return psnr
 
+def get_ws_psnr(img1, img2, max_val=255.): # cálculo em 3 canais, otimizada
+    img1 = np.float64(img1)
+    img2 = np.float64(img2)
+    
+    height, width = img1.shape[0], img1.shape[1]
+
+    # calcula os pesos e expande os pesos para shape (height, width, 1)
+    w = np.weights(height, width)
+    w_expanded = w[:, :, np.newaxis] # (height, width, 1)
+    
+    # calcula o WS-MSE para todos os canais (olhar o código WSMSE.py)
+    squared_diff = (img1 - img2) ** 2
+    weighted_squared_diff = squared_diff * w_expanded
+    wmse_three_channel = sum(sum(weighted_squared_diff, 0), 0) / (4 * np.pi)
+
+    # calcula PSNR para cada canal
+    wmse_three_channel = np.where(wmse_three_channel == 0, 1e-10, wmse_three_channel) # evita divisão por zero, pois iria para infinito (ainda fica com um valor muito alto)
+    wspsnr_three_channel = 10 * np.log10(max_val**2 / wmse_three_channel)
+
+    return np.mean(wspsnr_three_channel)
+
+def get_ssim(inp, otp):
+  ssim = tf.image.ssim(
+      inp, otp, max_val=255)
+  return ssim.numpy()
+
+def get_ssim2(img1, img2, K1=.01, K2=.03, L=255):
+  def __fspecial_gauss(size, sigma):
+    x, y = np.mgrid[-size//2 + 1:size//2 + 1, -size//2 + 1:size//2 + 1]
+    g = np.exp(-((x**2 + y**2)/(2.0*sigma**2)))
+    return g/g.sum()
+
+  img1 = np.float64(img1)
+  img2 = np.float64(img2)
+  
+  k = 11
+  sigma = 1.5
+  window = __fspecial_gauss(k, sigma)
+  window2 = np.zeros_like(window)
+  window2[k//2, k//2] = 1 
+
+  C1 = (K1*L)**2
+  C2 = (K2*L)**2
+  
+  height, width = img1.shape[0], img1.shape[1]
+  W = np.weights(height, width)
+  Wi = signal.convolve2d(W, window2, 'valid')
+  
+  weight_sum = sum(Wi)
+  
+  wsssim_channels = np.zeros(3)
+  
+  for c in range(3):
+      channel1 = img1[:, :, c]
+      channel2 = img2[:, :, c]
+      
+      mu1 = signal.convolve2d(channel1, window, 'valid')
+      mu2 = signal.convolve2d(channel2, window, 'valid')
+      
+      mu1_sq = mu1 * mu1
+      mu2_sq = mu2 * mu2
+      mu1_mu2 = mu1 * mu2
+      
+      sigma1_sq = signal.convolve2d(channel1 * channel1, window, 'valid') - mu1_sq
+      sigma2_sq = signal.convolve2d(channel2 * channel2, window, 'valid') - mu2_sq
+      sigma12 = signal.convolve2d(channel1 * channel2, window, 'valid') - mu1_mu2
+      
+      numerator = (2*mu1_mu2 + C1) * (2*sigma12 + C2)
+      denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
+      ssim_map = (numerator / denominator) * Wi
+      
+      wsssim_channels[c] = sum(ssim_map) / weight_sum
+  
+  return np.mean(wsssim_channels)
+
+def get_ws_ssim(img1, img2, K1=.01, K2=.03, L=255):
+  def __fspecial_gauss(size, sigma):
+    x, y = np.mgrid[-size//2 + 1:size//2 + 1, -size//2 + 1:size//2 + 1]
+    g = np.exp(-((x**2 + y**2)/(2.0*sigma**2)))
+    return g/g.sum()
+
+  img1 = np.float64(img1)
+  img2 = np.float64(img2)
+  
+  k = 11
+  sigma = 1.5
+  window = __fspecial_gauss(k, sigma)
+  window2 = np.zeros_like(window)
+  window2[k//2, k//2] = 1 
+
+  C1 = (K1*L)**2
+  C2 = (K2*L)**2
+  
+  height, width = img1.shape[0], img1.shape[1]
+  W = np.weights(height, width)
+  Wi = signal.convolve2d(W, window2, 'valid')
+  
+  weight_sum = sum(Wi)
+  
+  wsssim_channels = np.zeros(3)
+  
+  for c in range(3):
+      channel1 = img1[:, :, c]
+      channel2 = img2[:, :, c]
+      
+      mu1 = signal.convolve2d(channel1, window, 'valid')
+      mu2 = signal.convolve2d(channel2, window, 'valid')
+      
+      mu1_sq = mu1 * mu1
+      mu2_sq = mu2 * mu2
+      mu1_mu2 = mu1 * mu2
+      
+      sigma1_sq = signal.convolve2d(channel1 * channel1, window, 'valid') - mu1_sq
+      sigma2_sq = signal.convolve2d(channel2 * channel2, window, 'valid') - mu2_sq
+      sigma12 = signal.convolve2d(channel1 * channel2, window, 'valid') - mu1_mu2
+      
+      numerator = (2*mu1_mu2 + C1) * (2*sigma12 + C2)
+      denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
+      ssim_map = (numerator / denominator) * Wi
+      
+      wsssim_channels[c] = sum(ssim_map) / weight_sum
+  
+  return np.mean(wsssim_channels)
+
+def get_ms_ssim(inp, otp):
+  ms_ssim = tf.image.ssim_multiscale(
+      inp, otp, max_val=255)
+  return ms_ssim.numpy()
+
+def get_mse(inp, otp):
+  mse = np.mean(np.square(inp.astype(np.float32) - otp.astype(np.float32)))
+  return mse
+
+def get_ws_mse(img1, img2):
+    img1 = np.float64(img1)
+    img2 = np.float64(img2)
+    
+    height, width = img1.shape[0], img1.shape[1]
+    
+    # calcula os pesos e expande os pesos para shape (height, width, 1)
+    w = weights(height, width)
+    w_expanded = w[:, :, np.newaxis] # (height, width, 1)
+    
+    # (img1 - img2)^2 tem shape (height, width, 3)
+    # w_expanded tem shape (height, width, 1)
+    # a multiplicação faz broadcast automaticamente
+    squared_diff = (img1 - img2) ** 2
+    weighted_squared_diff = squared_diff * w_expanded
+    
+    # soma sobre altura e largura, mantendo os canais separados
+    r = 1
+    wmse_three_channel = sum(sum(weighted_squared_diff, 0), 0) / (4 * np.pi * r)
+
+    # média dos 3 canais
+    return np.mean(wmse_three_channel)
+
+def get_lpips(inp, otp):
+  pass 
 
 def get_image_names(images_glob):
   if not images_glob:
