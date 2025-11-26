@@ -71,7 +71,7 @@ docker run --gpus all -it --rm -v "$(pwd)":/app hific-360-env
 
 
 target low = 0.14
-target mid = 0.14
-target high = 0.14
+target mid = 0.3
+target high = 0.45
 
 ./train_all_models.sh
