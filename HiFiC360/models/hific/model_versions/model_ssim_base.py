@@ -16,7 +16,6 @@
 import collections
 import glob
 import itertools
-import numpy as np
 
 from compare_gan.gans import loss_lib as compare_gan_loss_lib
 import tensorflow.compat.v1 as tf
@@ -48,51 +47,7 @@ Nodes = collections.namedtuple(
      "input_image_scaled",      # [0, 1]
      "reconstruction",          # [0, 255]
      "reconstruction_scaled",   # [0, 1]
-     "latent_quantized",        # Latent post-quantization.
-     "offset_h",
-     "img_h",
-     "img_w"])
-
-
-def _tf_weights(height, width, offset_h, crop_height, crop_width):
-  """Calculates weights for equirectangular crop."""
-  # height: (Batch,) or scalar
-  # width: (Batch,) or scalar
-  # offset_h: (Batch,) or scalar
-  # crop_height: scalar
-  # crop_width: scalar
-  
-  # Ensure inputs are float32
-  height = tf.cast(height, tf.float32)
-  width = tf.cast(width, tf.float32)
-  offset_h = tf.cast(offset_h, tf.float32)
-  crop_height_f = tf.cast(crop_height, tf.float32)
-  crop_width_f = tf.cast(crop_width, tf.float32)
-
-  def compute_single_weight(args):
-      h, w, off_h = args
-      
-      # phis calculation
-      # indices 0 to crop_height
-      i = tf.range(crop_height_f + 1, dtype=tf.float32)
-      global_i = i + off_h
-      phis = global_i * np.pi / h
-      
-      deltaTheta = 2 * np.pi / w
-      
-      cos_phis = tf.cos(phis)
-      column = deltaTheta * (-cos_phis[1:] + cos_phis[:-1])
-      
-      # Expand to width
-      # column shape: (crop_height,)
-      # result shape: (crop_height, crop_width, 1)
-      weights = tf.tile(column[:, tf.newaxis, tf.newaxis], [1, tf.cast(crop_width, tf.int32), 1])
-      return weights
-
-  elems = (height, width, offset_h)
-  weights = tf.map_fn(compute_single_weight, elems, dtype=tf.float32)
-  
-  return weights
+     "latent_quantized"])       # Latent post-quantization.
 
 
 class _LossScaler(object):
@@ -311,34 +266,15 @@ class HiFiC(object):
     if self._setup_discriminator:
       # Split the (N+1) batches into two arguments for build_model.
       def _batch_to_dict(batch):
-        images = batch["image"]
-        offsets = batch["offset_h"]
-        heights = batch["img_h"]
-        widths = batch["img_w"]
-
         num_sub_batches = self._num_steps_disc + 1
         sub_batch_size = batch_size // num_sub_batches
         splits = [sub_batch_size, sub_batch_size * self._num_steps_disc]
-        
-        input_image, input_images_d_steps = tf.split(images, splits)
-        input_offset, input_offsets_d_steps = tf.split(offsets, splits)
-        input_height, input_heights_d_steps = tf.split(heights, splits)
-        input_width, input_widths_d_steps = tf.split(widths, splits)
-
+        input_image, input_images_d_steps = tf.split(batch, splits)
         return dict(input_image=input_image,
-                    input_images_d_steps=input_images_d_steps,
-                    input_offset=input_offset,
-                    input_offsets_d_steps=input_offsets_d_steps,
-                    input_height=input_height,
-                    input_heights_d_steps=input_heights_d_steps,
-                    input_width=input_width,
-                    input_widths_d_steps=input_widths_d_steps)
+                    input_images_d_steps=input_images_d_steps)
     else:
       def _batch_to_dict(batch):
-        return dict(input_image=batch["image"],
-                    input_offset=batch["offset_h"],
-                    input_height=batch["img_h"],
-                    input_width=batch["img_w"])
+        return dict(input_image=batch)
 
     dataset = self._get_dataset(batch_size, crop_size,
                                 images_glob, tfds_arguments)
@@ -392,8 +328,7 @@ class HiFiC(object):
         else:
           image = features[tfds_arguments.features_key]
         if not crop_size:
-          image_shape = tf.shape(image)
-          return {"image": image, "offset_h": 0, "img_h": image_shape[0], "img_w": image_shape[1]}
+          return image
         tf.logging.info("Scaling down %s and cropping to %d x %d", image,
                         crop_size, crop_size)
         with tf.name_scope("random_scale"):
@@ -420,21 +355,9 @@ class HiFiC(object):
           image = tf.image.resize_images(
               image, [tf.ceil(scale * height),
                       tf.ceil(scale * width)])
-          
-          scaled_shape = tf.shape(image)
-          img_h = scaled_shape[0]
-          img_w = scaled_shape[1]
-
         with tf.name_scope("random_crop"):
-          max_offset_h = img_h - crop_size
-          max_offset_w = img_w - crop_size
-          
-          offset_h = tf.random_uniform([], minval=0, maxval=max_offset_h + 1, dtype=tf.int32)
-          offset_w = tf.random_uniform([], minval=0, maxval=max_offset_w + 1, dtype=tf.int32)
-          
-          image = tf.image.crop_to_bounding_box(image, offset_h, offset_w, crop_size, crop_size)
-          
-        return {"image": image, "offset_h": offset_h, "img_h": img_h, "img_w": img_w}
+          image = tf.image.random_crop(image, [crop_size, crop_size, 3])
+        return image
 
       dataset = dataset.map(
           _preprocess, num_parallel_calls=DATASET_NUM_PARALLEL)
@@ -448,9 +371,7 @@ class HiFiC(object):
 
       return dataset
 
-  def build_model(self, input_image, input_images_d_steps=None, 
-                  input_offset=None, input_height=None, input_width=None,
-                  input_offsets_d_steps=None, input_heights_d_steps=None, input_widths_d_steps=None):
+  def build_model(self, input_image, input_images_d_steps=None):
     """Build model and losses and train_ops.
 
     Args:
@@ -464,17 +385,10 @@ class HiFiC(object):
     """
     if input_images_d_steps is None:
       input_images_d_steps = []
-      input_offsets_d_steps = []
-      input_heights_d_steps = []
-      input_widths_d_steps = []
     else:
       input_images_d_steps.set_shape(
           self.input_spec["input_images_d_steps"].shape)
       input_images_d_steps = tf.split(input_images_d_steps, self.num_steps_disc)
-      
-      input_offsets_d_steps = tf.split(input_offsets_d_steps, self.num_steps_disc)
-      input_heights_d_steps = tf.split(input_heights_d_steps, self.num_steps_disc)
-      input_widths_d_steps = tf.split(input_widths_d_steps, self.num_steps_disc)
 
     if self.evaluation and input_images_d_steps:
       raise ValueError("Only need input_image for eval! {}".format(
@@ -497,7 +411,7 @@ class HiFiC(object):
 
     # Compute output graph.
     nodes_gen, bpp_pair, bitstrings = \
-      self._compute_compression_graph(input_image, input_offset, input_height, input_width)
+      self._compute_compression_graph(input_image)
 
     if self.evaluation:
       tf.logging.info("Evaluation mode: build_model done.")
@@ -505,10 +419,10 @@ class HiFiC(object):
       return reconstruction, bitstrings
 
     nodes_disc = []  # list of Nodes, one for every sub-batch of disc
-    for i, (sub_batch, sub_offset, sub_height, sub_width) in enumerate(zip(input_images_d_steps, input_offsets_d_steps, input_heights_d_steps, input_widths_d_steps)):
+    for i, sub_batch in enumerate(input_images_d_steps):
       with tf.name_scope("sub_batch_disc_{}".format(i)):
         nodes, _, _ = self._compute_compression_graph(
-            sub_batch, sub_offset, sub_height, sub_width, create_summaries=False)
+            sub_batch, create_summaries=False)
         nodes_disc.append(nodes)
 
     if self._auto_encoder_ckpt_path:
@@ -600,7 +514,7 @@ class HiFiC(object):
     """Instantiates discriminator."""
     self._discriminator = archs.Discriminator()
 
-  def _compute_compression_graph(self, input_image, offset_h=None, img_h=None, img_w=None, create_summaries=True):
+  def _compute_compression_graph(self, input_image, create_summaries=True):
     """Compute a forward pass through encoder and decoder.
 
     Args:
@@ -643,10 +557,7 @@ class HiFiC(object):
 
     nodes = Nodes(input_image, input_image_scaled,
                   reconstruction, reconstruction_scaled,
-                  latent_quantized=decoder_in,
-                  offset_h=offset_h,
-                  img_h=img_h,
-                  img_w=img_w)
+                  latent_quantized=decoder_in)
     return nodes, BppPair(total_nbpp, total_qbpp), bitstream_tensors
 
   def _get_encoder_out(self,
@@ -702,19 +613,7 @@ class HiFiC(object):
       input_image = tf.cast(input_image, tf.float32)
       reconstruction = tf.cast(reconstruction, tf.float32)
       sq_err = tf.math.squared_difference(input_image, reconstruction)
-      
-      if nodes.offset_h is not None and nodes.img_h is not None:
-        crop_shape = tf.shape(input_image)
-        crop_height = crop_shape[1]
-        crop_width = crop_shape[2]
-        
-        weights = _tf_weights(nodes.img_h, nodes.img_w, nodes.offset_h, crop_height, crop_width)
-        
-        weighted_sq_err = sq_err * weights
-        distortion_loss = tf.reduce_sum(weighted_sq_err) / (tf.reduce_sum(weights) * 3.0)
-      else:
-        distortion_loss = tf.reduce_mean(sq_err)
-      
+      distortion_loss = tf.reduce_mean(sq_err)
       return distortion_loss
 
   def _compute_perceptual_loss(self, nodes: Nodes):
@@ -730,97 +629,11 @@ class HiFiC(object):
     # User specified parameters: K1 = 0.01, K2 = 0.03, k = 11, sigma = 1.5
     # These are defaults for tf.image.ssim
     
-    if nodes.offset_h is not None and nodes.img_h is not None:
-        # Implementação manual do SSIM para obter o mapa, já que tf.image.ssim não suporta return_index_map no TF 1.15
-        
-        def _ssim_map(img1, img2, max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03):
-            img1 = tf.convert_to_tensor(img1)
-            img2 = tf.convert_to_tensor(img2)
-            
-            # Constantes
-            c1 = (k1 * max_val) ** 2
-            c2 = (k2 * max_val) ** 2
-            
-            # Filtro Gaussiano
-            # Nota: tf.image.ssim usa um filtro gaussiano 1D aplicado separadamente em H e W
-            # Aqui vamos simplificar usando tf.nn.depthwise_conv2d com um kernel gaussiano 2D ou similar
-            # Para reproduzir exatamente o tf.image.ssim, precisaríamos criar o kernel gaussiano
-            
-            # Criando kernel gaussiano
-            x = tf.range(filter_size, dtype=tf.float32)
-            x = x - tf.cast(filter_size // 2, tf.float32)
-            gauss = tf.exp(-(x**2) / (2 * filter_sigma**2))
-            gauss = gauss / tf.reduce_sum(gauss)
-            
-            # Kernel 2D separável (H, 1, 1, 1) e (1, W, 1, 1) seria o ideal, mas depthwise espera (H, W, In, Multiplier)
-            # Vamos criar um kernel (filter_size, filter_size, 1, 1)
-            gauss_kernel_1d = gauss[:, tf.newaxis] # (11, 1)
-            gauss_kernel_2d = tf.matmul(gauss_kernel_1d, tf.transpose(gauss_kernel_1d)) # (11, 11)
-            gauss_kernel = gauss_kernel_2d[:, :, tf.newaxis, tf.newaxis] # (11, 11, 1, 1)
-            
-            # Replicar para 3 canais (depthwise conv)
-            kernel = tf.tile(gauss_kernel, [1, 1, 3, 1]) # (11, 11, 3, 1)
-            
-            def _conv(img):
-                return tf.nn.depthwise_conv2d(img, kernel, strides=[1, 1, 1, 1], padding='VALID')
-            
-            # Padding para manter o tamanho (VALID reduz o tamanho, SAME introduz bordas artificiais)
-            # tf.image.ssim usa 'VALID' internamente mas computa a média apenas na área válida?
-            # Na verdade, tf.image.ssim reduz as dimensões da imagem resultante.
-            # Vamos usar SAME para manter o tamanho e alinhar com os pesos, ou VALID e cortar os pesos.
-            # O código original do evaluate.py usa 'valid'.
-            # Se usarmos 'VALID', o mapa de saída será menor que a entrada.
-            # Precisamos ajustar os pesos também.
-            
-            # Vamos usar SAME para simplificar o alinhamento com os pesos globais
-            # Mas cuidado com bordas.
-            
-            # Melhor abordagem: Usar VALID como no paper/implementação padrão e cortar os pesos.
-            pad = filter_size // 2
-            
-            # Médias
-            mu1 = _conv(img1)
-            mu2 = _conv(img2)
-            
-            mu1_sq = mu1 * mu1
-            mu2_sq = mu2 * mu2
-            mu1_mu2 = mu1 * mu2
-            
-            sigma1_sq = _conv(img1 * img1) - mu1_sq
-            sigma2_sq = _conv(img2 * img2) - mu2_sq
-            sigma12 = _conv(img1 * img2) - mu1_mu2
-            
-            # SSIM map
-            numerator = (2 * mu1_mu2 + c1) * (2 * sigma12 + c2)
-            denominator = (mu1_sq + mu2_sq + c1) * (sigma1_sq + sigma2_sq + c2)
-            ssim_map = numerator / denominator
-            
-            return ssim_map
-
-        ssim_map = _ssim_map(input_image_scaled, reconstruction_scaled)
-        
-        # Ajustar pesos para o tamanho do mapa SSIM (devido à convolução VALID)
-        # O mapa SSIM é menor por (filter_size - 1) pixels em cada dimensão
-        filter_size = 11
-        pad = filter_size // 2
-        
-        crop_shape = tf.shape(input_image_scaled)
-        crop_height = crop_shape[1]
-        crop_width = crop_shape[2]
-        
-        # Pesos originais para o crop inteiro
-        weights_full = _tf_weights(nodes.img_h, nodes.img_w, nodes.offset_h, crop_height, crop_width)
-        
-        # Cortar os pesos para corresponder à área válida do SSIM
-        # weights_full shape: (Batch, H, W, 1)
-        weights_valid = weights_full[:, pad : crop_height - pad, pad : crop_width - pad, :]
-        
-        weighted_ssim = ssim_map * weights_valid
-        mean_ssim = tf.reduce_sum(weighted_ssim) / (tf.reduce_sum(weights_valid) * 3.0)
-        ssim_loss = 1.0 - mean_ssim
-    else:
-        ssim_value = tf.image.ssim(input_image_scaled, reconstruction_scaled, max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03)
-        ssim_loss = 1.0 - tf.reduce_mean(ssim_value)
+    ssim_value = tf.image.ssim(input_image_scaled, reconstruction_scaled, max_val=1.0, filter_size=11, filter_sigma=1.5, k1=0.01, k2=0.03)
+    
+    # Loss should be minimized. SSIM is maximized (1 is best).
+    # So loss = 1 - SSIM
+    ssim_loss = 1.0 - tf.reduce_mean(ssim_value)
     
     return ssim_loss
 

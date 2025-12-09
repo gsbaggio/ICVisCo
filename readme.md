@@ -60,8 +60,7 @@ avaliar o modelo:
 
 python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../SUN360/test-10
 
-python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi --ckpt_dir ck
-pts/mse_lpips_lo_200k ckpts/mse_lpips_mi_200k ckpts/mse_lpips_hi_200k ckpts/hific_mse_lpips_lo_200k ckpts/hific_mse_lpips_mi_200k ckpts/hific_mse_lpips_hi_200k --out_dir results/mselpips_lo results/mselpips_mi results/mselpips_hi results/hific_lo results/hific_mi results/hific_hi --group NoGan NoGan NoGan HiFiC HiFiC HiFiC --local_image_dir ../SUN360/test-10 --results_csv results/resultados_finais.csv
+python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_hi --ckpt_dir ckpts/mse_lpips_lo_200k ckpts/mse_lpips_mi_200k ckpts/mse_lpips_hi_200k ckpts/hific_mse_lpips_lo_200k ckpts/hific_mse_lpips_mi_200k ckpts/hific_mse_lpips_hi_200k ckpts/mse_ssim_lo_200k ckpts/mse_ssim_mi_200k ckpts/mse_ssim_hi_200k ckpts/hific_mse_ssim_lo_200k ckpts/hific_mse_ssim_hi_200k --out_dir results/mselpips_lo results/mselpips_mi results/mselpips_hi results/hificlpips_lo results/hificlpips_mi results/hificlpips_hi results/msessim_lo results/msessim_mi results/msessim_hi results/hificssim_lo results/hificssim_hi --group NoGan NoGan NoGan HiFiC HiFiC HiFiC SSIM SSIM SSIM HiFiCSSIM HiFiCSSIM --local_image_dir ../SUN360/test-30 --results_csv results/resultados_finais.csv
 
 python plot_results.py results/resultados_finais.csv --output results/graficos_comparativos.png
 

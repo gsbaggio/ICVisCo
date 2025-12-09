@@ -118,7 +118,7 @@ def eval_trained_model(config_name,
 
           metrics = {'psnr': get_psnr(inp_np, otp_np),
                     'ws-psnr': get_ws_psnr(inp_np, otp_np),
-                    'ssim': ssim_val[0],
+                    'ssim': get_ssim(inp_np, otp_np),
                     'ws_ssim': get_ws_ssim(inp_np, otp_np),
                     'mse': get_mse(inp_np, otp_np),
                     'ws-mse': get_ws_mse(inp_np, otp_np),
@@ -186,6 +186,47 @@ def get_ws_psnr(img1, img2, max_val=255.): # cálculo em 3 canais, otimizada
     wspsnr_three_channel = 10 * np.log10(max_val**2 / wmse_three_channel)
 
     return np.mean(wspsnr_three_channel)
+
+def get_ssim(img1, img2, K1=.01, K2=.03, L=255):
+  def __fspecial_gauss(size, sigma):
+    x, y = np.mgrid[-size//2 + 1:size//2 + 1, -size//2 + 1:size//2 + 1]
+    g = np.exp(-((x**2 + y**2)/(2.0*sigma**2)))
+    return g/g.sum()
+
+  img1 = np.float64(img1)
+  img2 = np.float64(img2)
+  
+  k = 11
+  sigma = 1.5
+  window = __fspecial_gauss(k, sigma)
+
+  C1 = (K1*L)**2
+  C2 = (K2*L)**2
+  
+  ssim_channels = np.zeros(3)
+  
+  for c in range(3):
+      channel1 = img1[:, :, c]
+      channel2 = img2[:, :, c]
+      
+      mu1 = signal.convolve2d(channel1, window, 'valid')
+      mu2 = signal.convolve2d(channel2, window, 'valid')
+      
+      mu1_sq = mu1 * mu1
+      mu2_sq = mu2 * mu2
+      mu1_mu2 = mu1 * mu2
+      
+      sigma1_sq = signal.convolve2d(channel1 * channel1, window, 'valid') - mu1_sq
+      sigma2_sq = signal.convolve2d(channel2 * channel2, window, 'valid') - mu2_sq
+      sigma12 = signal.convolve2d(channel1 * channel2, window, 'valid') - mu1_mu2
+      
+      numerator = (2*mu1_mu2 + C1) * (2*sigma12 + C2)
+      denominator = (mu1_sq + mu2_sq + C1) * (sigma1_sq + sigma2_sq + C2)
+      ssim_map = numerator / denominator
+      
+      ssim_channels[c] = np.mean(ssim_map)
+  
+  return np.mean(ssim_channels)
 
 def get_ws_ssim(img1, img2, K1=.01, K2=.03, L=255):
   def __fspecial_gauss(size, sigma):
