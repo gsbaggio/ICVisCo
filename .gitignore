@@ -4,6 +4,8 @@ HiFiC360/models/evaluation_results/
 HiFiC360/models/results/
 HiFiC360/SUN360-200/
 HiFiC360/SUN360/
+HiFiC360/CTC-360-resized/
+resize-CTC360/CTC-360/
 transformarBMP-PNG/imagesBMP/
 transformarBMP-PNG/imagesPNG/
 testes-WS/images/
