@@ -429,18 +429,7 @@ class HiFiC(object):
           max_offset_h = img_h - crop_size
           max_offset_w = img_w - crop_size
           
-          # Gaussian distribution for offset_h to favor center crops (equator)
-          # Center of crop (offset_h + crop_size/2) should be close to center of image (img_h/2)
-          # So offset_h should be close to (img_h - crop_size) / 2 = max_offset_h / 2
-          max_offset_h_float = tf.cast(max_offset_h, tf.float32)
-          mean_h = max_offset_h_float / 2.0
-          # Standard deviation set so that +/- 2 sigmas cover the whole range [0, max_offset_h]
-          stddev_h = max_offset_h_float / 4.0 
-          
-          offset_h_float = tf.random_normal([], mean=mean_h, stddev=stddev_h)
-          offset_h = tf.cast(tf.round(offset_h_float), tf.int32)
-          offset_h = tf.clip_by_value(offset_h, 0, max_offset_h)
-          
+          offset_h = tf.random_uniform([], minval=0, maxval=max_offset_h + 1, dtype=tf.int32)
           offset_w = tf.random_uniform([], minval=0, maxval=max_offset_w + 1, dtype=tf.int32)
           
           image = tf.image.crop_to_bounding_box(image, offset_h, offset_w, crop_size, crop_size)
