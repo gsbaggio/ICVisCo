@@ -60,7 +60,11 @@ avaliar o modelo:
 
 python -m hific.evaluate   --config hific   --ckpt_dir ckpts/hific_test   --out_dir evaluation_results/   --local_image_dir ../SUN360/test-10
 
-python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo hific_lo --ckpt_dir ckpts/mse_lpips_lo_200k ckpts/mse_lpips_mi_200k ckpts/mse_lpips_hi_200k ckpts/hific_mse_lpips_lo_200k ckpts/hific_mse_lpips_mi_200k ckpts/hific_mse_lpips_hi_200k ckpts/mse_ssim_lo_200k ckpts/mse_ssim_mi_200k ckpts/mse_ssim_hi_200k ckpts/hific_mse_ssim_lo_200k ckpts/hific_mse_ssim_mi_200k ckpts/hific_mse_ssim_hi_200k ckpts/WSmse_WSssim_lo_200k ckpts/WSmse_WSssim_mi_200k ckpts/WSmse_WSssim_hi_200k ckpts/hific_WSmse_WSssim_lo_200k ckpts/hific_WSmse_WSssim_mi_200k ckpts/hific_WSmse_WSssim_hi_200k ckpts/gauss_WSmse_WSssim_lo_200k ckpts/gauss_hific_WSmse_WSssim_lo_200k --out_dir results/mselpips_lo results/mselpips_mi results/mselpips_hi results/hificlpips_lo results/hificlpips_mi results/hificlpips_hi results/msessim_lo results/msessim_mi results/msessim_hi results/hificssim_lo results/hificssim_mi results/hificssim_hi results/WSmsessim_lo results/WSmsessim_mi results/WSmsessim_hi results/WShificssim_lo results/WShificssim_mi results/WShificssim_hi results/gaussssim_lo results/gausshific_lo --group LPIPS LPIPS LPIPS HiFiCLPIPS HiFiCLPIPS HiFiCLPIPS SSIM SSIM SSIM HiFiCSSIM HiFiCSSIM HiFiCSSIM WSSSIM WSSSIM WSSSIM WSHiFiCSSIM WSHiFiCSSIM WSHiFiCSSIM GAUSS GAUSSHIFIC --local_image_dir ../CTC-360-resized --results_csv results/resultados_finais.csv
+python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi mselpips_lo mselpips_mi mselpips_hi hific_lo hific_mi hific_hi --ckpt_dir ckpts/mse_lpips_lo_200k ckpts/mse_lpips_mi_200k ckpts/mse_lpips_hi_200k ckpts/hific_mse_lpips_lo_200k ckpts/hific_mse_lpips_mi_200k ckpts/hific_mse_lpips_hi_200k ckpts/mse_ssim_lo_200k ckpts/mse_ssim_mi_200k ckpts/mse_ssim_hi_200k ckpts/hific_mse_ssim_lo_200k ckpts/hific_mse_ssim_mi_200k ckpts/hific_mse_ssim_hi_200k ckpts/WSmse_WSssim_lo_200k ckpts/WSmse_WSssim_mi_200k ckpts/WSmse_WSssim_hi_200k ckpts/hific_WSmse_WSssim_lo_200k ckpts/hific_WSmse_WSssim_mi_200k ckpts/hific_WSmse_WSssim_hi_200k ckpts/gauss_WSmse_WSssim_lo_200k ckpts/gauss_WSmse_WSssim_mi_200k ckpts/gauss_WSmse_WSssim_hi_200k ckpts/gauss_hific_WSmse_WSssim_lo_200k ckpts/gauss_hific_WSmse_WSssim_mi_200k ckpts/gauss_hific_WSmse_WSssim_hi_200k --out_dir results/mselpips_lo results/mselpips_mi results/mselpips_hi results/hificlpips_lo results/hificlpips_mi results/hificlpips_hi results/msessim_lo results/msessim_mi results/msessim_hi results/hificssim_lo results/hificssim_mi results/hificssim_hi results/WSmsessim_lo results/WSmsessim_mi results/WSmsessim_hi results/WShificssim_lo results/WShificssim_mi results/WShificssim_hi results/gaussssim_lo results/gaussssim_mi results/gaussssim_hi results/gausshific_lo results/gausshific_mi results/gausshific_hi --group LPIPS LPIPS LPIPS HiFiCLPIPS HiFiCLPIPS HiFiCLPIPS SSIM SSIM SSIM HiFiCSSIM HiFiCSSIM HiFiCSSIM WSSSIM WSSSIM WSSSIM WSHiFiCSSIM WSHiFiCSSIM WSHiFiCSSIM GAUSS GAUSS GAUSS GAUSSHIFIC GAUSSHIFIC GAUSSHIFIC --local_image_dir ../CTC-360-resized --results_csv results/resultados_finais.csv
+
+python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi --ckpt_dir ckpts/SWHDC_WSmse_WSssim_lo_200k ckpts/SWHDC_WSmse_WSssim_mi_200k ckpts/SWHDC_WSmse_WSssim_hi_200k --out_dir results/SWHDC_lo results/SWHDC_mi results/SWHDC_hi --group SWHDC SWHDC SWHDC --local_image_dir ../CTC-360-resized --results_csv results/resultados_finais_new.csv
+
+python -m hific.evaluate --config mselpips_lo --ckpt_dir ckpts/SWHDC_gauss_WSmse_WSssim_lo_200k --out_dir results/SWHDC_gauss_lo --group GAUSSSWHDC --local_image_dir ../CTC-360-resized --results_csv results/resultados_finais_gauss_swhdc.csv
 
 python plot_results.py results/resultados_finais.csv --output results/graficos_comparativos.png
 
@@ -78,3 +82,13 @@ target mid = 0.3
 target high = 0.45
 
 ./train_all_models.sh
+
+SWHDC2 - WS SSIM, learn = True, crop 256x512
+
+SWHDC3 - WS SSIM, learn = False, crop 256x512
+
+SWHDC4 - WS SSIM, learn = True, crop 256x256
+
+
+python -m hific.evaluate --config mselpips_mi --ckpt_dir ckpts/SWHDC6_teste_mi_100k --out_dir results/SWHDC6_teste --group SWHDC6 --local_image_dir .
+./CTC-360-resized --results_csv results/resultados_swhdc6_teste.csv

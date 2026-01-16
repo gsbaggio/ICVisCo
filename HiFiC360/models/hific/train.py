@@ -127,7 +127,11 @@ def parse_args(argv):
   parser.add_argument('--batch_size', type=int, default=8,
                       help='Batch size for training.')
   parser.add_argument('--crop_size', type=int, default=256,
-                      help='Crop size for input pipeline.')
+                      help='Crop size for input pipeline (square crop).')
+  parser.add_argument('--crop_height', type=int, default=None,
+                      help='Crop height (overrides crop_size if used with crop_width).')
+  parser.add_argument('--crop_width', type=int, default=None,
+                      help='Crop width (overrides crop_size if used with crop_height).')
   parser.add_argument('--lpips_weight_path',
                       help=('Where to store the LPIPS weights. Defaults to '
                             'current directory'))
@@ -170,8 +174,12 @@ def _parse_num_steps(steps):
 
 
 def main(args):
+  crop_size = args.crop_size
+  if args.crop_height and args.crop_width:
+      crop_size = (args.crop_height, args.crop_width)
+      
   train(args.config, args.ckpt_dir, args.num_steps,
-        args.init_autoencoder_from_ckpt_dir, args.batch_size, args.crop_size,
+        args.init_autoencoder_from_ckpt_dir, args.batch_size, crop_size,
         args.lpips_weight_path, args.image_summaries,
         helpers.parse_tfds_arguments(args), args.local_image_dir)
 
