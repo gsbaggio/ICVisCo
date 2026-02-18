@@ -64,7 +64,7 @@ python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi hific_lo h
 
 python -m hific.evaluate --config mselpips_lo mselpips_mi mselpips_hi --ckpt_dir ckpts/SWHDC_WSmse_WSssim_lo_200k ckpts/SWHDC_WSmse_WSssim_mi_200k ckpts/SWHDC_WSmse_WSssim_hi_200k --out_dir results/SWHDC_lo results/SWHDC_mi results/SWHDC_hi --group SWHDC SWHDC SWHDC --local_image_dir ../CTC-360-resized --results_csv results/resultados_finais_new.csv
 
-python -m hific.evaluate --config mselpips_hi --ckpt_dir ckpts/SWHDC_learn_WSmse_WSssim_hi_200k --out_dir results/SWHDC_learn_hi --group GAUSSLEARN --local_image_dir ../CTC-360-resized --results_csv results/resultados_parciais_learn_hi.csv
+python -m hific.evaluate --config mselpips_lo mselpips_mi --ckpt_dir ckpts/WSmse_WSssim_256x512_lo_200k ckpts/WSmse_WSssim_256x512_mi_200k --out_dir results/WSSSSIM_256x512_lo results/WSSSIM_256x512_mi --group 256x512teste 256x512teste --local_image_dir ../CTC-360-resized --results_csv results/resultados_teste_256x512.csv
 
 python plot_results.py results/resultados_finais.csv --output results/graficos_comparativos.png
 

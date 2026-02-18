@@ -20,6 +20,7 @@ The default values for all constructors reflect what was used in the paper.
 """
 
 import collections
+import math
 from compare_gan.architectures import abstract_arch
 from compare_gan.architectures import arch_ops
 import numpy as np
@@ -27,6 +28,190 @@ import tensorflow.compat.v1 as tf
 import tensorflow_compression as tfc
 
 from hific.helpers import ModelMode
+
+
+class SWHDCtf(tf.keras.layers.Layer):
+    """
+    Spherical Weighted Hybrid Dilated Convolution
+    TensorFlow / Keras implementation
+    """
+
+    def __init__(self, filters, kernel_size, dilations=[1, 2, 3], padding="same", strides=1, learn_weights=True, **kwargs):
+        super().__init__(**kwargs)
+
+        self.filters = filters
+        self.kernel_size = kernel_size
+        self.dilations = dilations
+        self.N = len(dilations)
+        self.learn_weights = learn_weights
+        
+        # Se 1, os pesos sao aprendidos. Se 0, usa o calculo geometrico SWHDC.
+        # Voce pode mudar isso para True por padrao se quiser sempre aprender.
+        
+    def build(self, input_shape):
+        in_channels = input_shape[-1]
+        kh, kw = self.kernel_size, self.kernel_size
+        self.kernel = self.add_weight(
+            name="kernel",
+            shape=(kh, kw, in_channels, self.filters),
+            trainable=True,
+        )
+
+        self.bias = self.add_weight(
+            name="bias",
+            shape=(self.filters,),
+            trainable=True,
+        )
+
+        if self.learn_weights:
+            # Perfil de pesos latentes com resolucao fixa (ex: 128 pontos latitudinais)
+            # Shape: [1, 128, N] -> Onde N é o número de dilatações
+            self.learned_profile = self.add_weight(
+                name="learned_weights_profile",
+                shape=(1, 128, self.N),
+                initializer=tf.initializers.random_normal(mean=0.0, stddev=0.1),
+                trainable=True
+            )
+
+        super().build(input_shape)
+
+    def circular_pad_width(self, x, pad):
+        """
+        Circular padding along width (axis=2 for NHWC).
+        """
+        if pad == 0:
+            return x
+
+        left = x[:, :, -pad:, :]
+        right = x[:, :, :pad, :]
+        return tf.concat([left, x, right], axis=2)   
+
+    def call(self, x):
+
+        def reflect_or_symmetric_pad_height(x, v_pad, H):
+            # Usar SYMMETRIC padding (repetir a borda) é mais estável nos polos 
+            # do que REFLECT ou Zeros para imagens 360, evitando descontinuidades.
+            return tf.pad(
+                  x,
+                  paddings=[[0, 0], [v_pad, v_pad], [0, 0], [0, 0]],
+                  mode="SYMMETRIC",
+            )
+
+        """
+        x: [B, H, W, C] (NHWC)
+        """
+        B, H, W, C = tf.unstack(tf.shape(x))
+        
+        row_wise_weights = None
+        
+        # Calcular H float para usos matemáticos
+        H_float = tf.cast(H, tf.float32)
+
+        if self.learn_weights:
+            # === Modo Aprendido ===
+            # Interpolar o perfil aprendido (128) para a altura atual (H)
+            # learned_profile: [1, 128, N]
+            
+            # Precisamos expandir dimensão para usar resize image: [Batch, H, W, Ch]
+            # Vamos tratar: Batch=1, H=128, W=N, C=1 para redimensionar a altura
+            # Mas tf.image.resize redimensiona H e W.
+            
+            # Estratégia: [1, 128, N] -> expand -> [1, 128, N, 1]
+            profile_expanded = tf.expand_dims(self.learned_profile, axis=-1)
+            
+            # Resize para [1, H, N, 1]
+            profile_resized = tf.image.resize(
+                profile_expanded, 
+                size=[H, self.N],
+                method=tf.image.ResizeMethod.BILINEAR
+            )
+            
+            # Remove dimensões extras -> [H, N]
+            # O profile_resized terá valores arbitrarios. Aplicamos Softmax
+            # ao longo da dimensão das dilatações (axis=1 agora após reshape ou axis=2 antes)
+            
+            w_interpolated = tf.reshape(profile_resized, [H, self.N]) # [H, N]
+            
+            # Softmax garante que a soma dos pesos das dilatações seja 1
+            row_wise_weights = tf.nn.softmax(w_interpolated, axis=-1) # [H, N]
+            
+            # Transpor para ficar [N, H] como o código original espera
+            row_wise_weights = tf.transpose(row_wise_weights, [1, 0]) # [N, H]
+
+        else:
+            # === Modo Calculado (SWHDC Original) ===
+            # ===== Compute Rs =====
+            # Usar centro dos pixels evita singularidade exata em 0 e pi
+            # phi vai de (0.5/H)*pi ate (1 - 0.5/H)*pi
+            step = math.pi / H_float
+            start = 0.5 * step
+            phi = tf.linspace(start, math.pi - start, H)
+            
+            eps = tf.keras.backend.epsilon()
+
+            # Com pixel centers, sin(phi) nunca é 0, mas mantemos eps por segurança
+            Rs = tf.minimum(
+                tf.cast(self.N, tf.float32),
+                tf.abs(1.0 / (tf.sin(phi) + eps))
+            )  # [H]
+
+            Rs = tf.expand_dims(Rs, axis=0)  # [1, H]
+
+            dilations_tensor = tf.cast(
+                tf.reshape(self.dilations, [self.N, 1]), tf.float32
+            )  # [N, 1]
+
+            cR = tf.math.ceil(Rs)
+            fR = tf.math.floor(Rs)
+
+            mask_exact = tf.equal(dilations_tensor, Rs)
+            mask_floor = tf.logical_and(tf.equal(dilations_tensor, fR), tf.logical_not(mask_exact))
+            mask_ceil = tf.logical_and(
+                tf.equal(dilations_tensor, cR),
+                tf.logical_not(tf.logical_or(mask_exact, mask_floor))
+            )
+
+            row_wise_weights = tf.zeros((self.N, H), dtype=tf.float32)
+            
+            # Broadcast values to match [N, H] for tf.where
+            diff_cR_Rs = tf.tile(cR - Rs, [self.N, 1])
+            diff_Rs_fR = tf.tile(Rs - fR, [self.N, 1])
+
+            row_wise_weights = tf.where(mask_exact, tf.ones_like(row_wise_weights), row_wise_weights)
+            row_wise_weights = tf.where(mask_floor, diff_cR_Rs, row_wise_weights)
+            row_wise_weights = tf.where(mask_ceil, diff_Rs_fR, row_wise_weights)
+
+        outputs = []
+
+        # ===== Loop over dilations =====
+        for idx, dilation_rate in enumerate(self.dilations):
+            # Padding sizes
+            v_pad = (self.kernel_size - 1) // 2
+            h_pad = dilation_rate * (self.kernel_size - 1) // 2
+
+            x2 = self.circular_pad_width(x, h_pad)
+            x2 = reflect_or_symmetric_pad_height(x2, v_pad, H)
+
+
+            # Dilated convolution (vertical dilation = 1, horizontal dilation = dilation_rate)
+            out = tf.nn.conv2d(
+                x2,
+                self.kernel,
+                strides=[1, 1, 1, 1],
+                padding="VALID",
+                dilations=[1, 1, dilation_rate, 1],
+            )
+            out = tf.nn.bias_add(out, self.bias)
+
+            # Apply row-wise weights
+            weights = tf.reshape(row_wise_weights[idx], [1, H, 1, 1])
+            out = out * weights
+
+            outputs.append(out)
+
+        # Sum over dilations
+        outputs = tf.stack(outputs, axis=0)  # [N, B, H, W, C]
+        return tf.reduce_sum(outputs, axis=0)  # [B, H, W, C]
 
 SCALES_MIN = 0.11
 SCALES_MAX = 256
@@ -83,8 +268,8 @@ class Encoder(tf.keras.Sequential):
     self._num_down = num_down
 
     model = [
-        tf.keras.layers.Conv2D(
-            filters=num_filters_base, kernel_size=7, padding="same"),
+        SWHDCtf(
+            filters=num_filters_base, kernel_size=7, dilations=[1, 2, 3]),
         ChannelNorm(),
         tf.keras.layers.ReLU()
     ]
@@ -98,9 +283,9 @@ class Encoder(tf.keras.Sequential):
           tf.keras.layers.ReLU()])
 
     model.append(
-        tf.keras.layers.Conv2D(
+        SWHDCtf(
             filters=num_filters_bottleneck,
-            kernel_size=3, padding="same"))
+            kernel_size=3, dilations=[1, 2, 3]))
 
     super(Encoder, self).__init__(layers=model, name=name)
 
@@ -127,9 +312,9 @@ class Decoder(tf.keras.layers.Layer):
       num_residual_blocks: number of residual blocks.
     """
     head = [ChannelNorm(),
-            tf.keras.layers.Conv2D(
+            SWHDCtf(
                 filters=num_filters_base * (2 ** num_up),
-                kernel_size=3, padding="same"),
+                kernel_size=3, dilations=[1, 2, 3]),
             ChannelNorm()]
 
     residual_blocks = []
@@ -155,10 +340,10 @@ class Decoder(tf.keras.layers.Layer):
 
     # Final conv layer.
     tail.append(
-        tf.keras.layers.Conv2D(
+        SWHDCtf(
             filters=3,
             kernel_size=7,
-            padding="same"))
+            dilations=[1, 2, 3]))
 
     self._head = tf.keras.Sequential(head)
     self._residual_blocks = tf.keras.Sequential(residual_blocks)
@@ -199,10 +384,10 @@ class ResidualBlock(tf.keras.layers.Layer):
     kwargs_conv2d["kernel_size"] = kernel_size
 
     block = [
-        tf.keras.layers.Conv2D(**kwargs_conv2d),
+        SWHDCtf(dilations=[1, 2, 3], **kwargs_conv2d),
         ChannelNorm(),
         tf.keras.layers.Activation(activation),
-        tf.keras.layers.Conv2D(**kwargs_conv2d),
+        SWHDCtf(dilations=[1, 2, 3], **kwargs_conv2d),
         ChannelNorm()]
 
     self.block = tf.keras.Sequential(name=name, layers=block)
