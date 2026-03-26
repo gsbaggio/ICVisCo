@@ -294,7 +294,14 @@ class HiFiC(object):
       Instance of tf.data.Dataset.
     """
 
-    crop_size_float = tf.constant(crop_size, tf.float32) if crop_size else None
+    if isinstance(crop_size, (list, tuple)):
+      crop_h, crop_w = crop_size
+    else:
+      crop_h = crop_w = crop_size
+
+    crop_h_float = tf.constant(crop_h, tf.float32) if crop_h else None
+    crop_w_float = tf.constant(crop_w, tf.float32) if crop_w else None
+    
     smallest_fac = tf.constant(0.75, tf.float32)
     biggest_fac = tf.constant(0.95, tf.float32)
 
@@ -323,14 +330,21 @@ class HiFiC(object):
         dataset = builder.as_dataset(split=split)
 
       def _preprocess(features):
+        # Capture variables from outer scope
+        c_h, c_w = crop_h, crop_w
+        
+        # Create float tensors inside the function scope for safety/consistency with model.py
+        c_h_f = tf.cast(c_h, tf.float32) if c_h else None
+        c_w_f = tf.cast(c_w, tf.float32) if c_w else None
+
         if images_glob:
           image = features
         else:
           image = features[tfds_arguments.features_key]
-        if not crop_size:
+        if not c_h or not c_w:
           return image
         tf.logging.info("Scaling down %s and cropping to %d x %d", image,
-                        crop_size, crop_size)
+                        c_h, c_w)
         with tf.name_scope("random_scale"):
           # Scale down by at least `biggest_fac` and at most `smallest_fac` to
           # remove JPG artifacts. This code also handles images that have one
@@ -339,24 +353,31 @@ class HiFiC(object):
           # returned will never be smaller than `crop_size`.
           image_shape = tf.cast(tf.shape(image), tf.float32)
           height, width = image_shape[0], image_shape[1]
-          smallest_side = tf.math.minimum(height, width)
+          
           # The smallest factor such that the downscaled image is still bigger
-          # than `crop_size`. Will be bigger than 1 for images smaller than
-          # `crop_size`.
-          image_smallest_fac = crop_size_float / smallest_side
+          # than the required crop dimensions.
+          image_smallest_fac = tf.math.maximum(c_h_f / height, c_w_f / width)
+          
           min_fac = tf.math.maximum(smallest_fac, image_smallest_fac)
           max_fac = tf.math.maximum(min_fac, biggest_fac)
+          
           scale = tf.random_uniform([],
                                     minval=min_fac,
                                     maxval=max_fac,
                                     dtype=tf.float32,
                                     seed=42,
                                     name=None)
-          image = tf.image.resize_images(
-              image, [tf.ceil(scale * height),
-                      tf.ceil(scale * width)])
+                                    
+          # Ensure new dimensions are integers
+          new_height = tf.cast(tf.ceil(scale * height), tf.int32)
+          new_width = tf.cast(tf.ceil(scale * width), tf.int32)
+          
+          # Stack to create a 1-D Tensor (vector) of shape (2,)
+          new_size = tf.stack([new_height, new_width])
+          image = tf.image.resize_images(image, new_size)
+
         with tf.name_scope("random_crop"):
-          image = tf.image.random_crop(image, [crop_size, crop_size, 3])
+          image = tf.image.random_crop(image, [c_h, c_w, 3])
         return image
 
       dataset = dataset.map(
