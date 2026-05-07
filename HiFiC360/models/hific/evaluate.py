@@ -20,12 +20,16 @@ NOTE: To evaluate models used in the paper, use tfci.py! See README.md.
 import argparse
 import collections
 import glob
+import argparse
+import collections
+import glob
 import itertools
 import os
 import sys
+import time
 import csv
-
 import numpy as np
+
 from scipy import signal
 from PIL import Image
 import tensorflow.compat.v1 as tf
@@ -72,9 +76,16 @@ def eval_trained_model(config_name,
       
       # Usar padrão que pega todos os formatos
       images_glob = f"{local_image_dir}/*.[pjpJ][npNP][gGgE]*"
+      # To avoid dynamic spatial shapes (which break some custom layers),
+      # read the first image size and use it as a fixed crop_size.
+      first_img_path = all_images[0]
+      with Image.open(first_img_path) as im:
+        w, h = im.size
+      crop_size_fixed = (h, w)
+      tf.logging.info(f'Using fixed crop_size={crop_size_fixed} for evaluation (from {first_img_path})')
       dataset = hific.build_input(
           batch_size=1,
-          crop_size=None,
+          crop_size=crop_size_fixed,
           images_glob=images_glob)
       image_names = get_image_names(images_glob)
     else:
@@ -108,8 +119,21 @@ def eval_trained_model(config_name,
         if max_images and i == max_images:
           break
         try:
-          inp_np, otp_np, bitstring_np, ssim_val = \
-            sess.run([input_image, output_image, bitstring, ssim_tensor])
+          run_meta = tf.RunMetadata()
+          run_opts = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+          
+          start_time = time.time()
+          inp_np, otp_np, bitstring_np = \
+            sess.run([input_image, output_image, bitstring],
+                     options=run_opts, run_metadata=run_meta)
+          inference_time = time.time() - start_time
+          
+          opts = tf.profiler.ProfileOptionBuilder.float_operation()
+          flops_stat = tf.profiler.profile(sess.graph, run_meta=run_meta, cmd='op', options=opts)
+          
+          flops = flops_stat.total_float_ops if flops_stat else 0
+          gflops = flops / 1e9
+          gmacs = gflops / 2.0  # 1 MAC ~ 2 FLOPs
 
           h, w, c = inp_np.shape
           assert c == 3
@@ -122,8 +146,13 @@ def eval_trained_model(config_name,
                     'ws_ssim': get_ws_ssim(inp_np, otp_np),
                     'mse': get_mse(inp_np, otp_np),
                     'ws-mse': get_ws_mse(inp_np, otp_np),
-                    'bpp_real': bpp}
+                    'bpp_real': bpp,
+                    'inference_time(s)': inference_time,
+                    'gflops': gflops,
+                    'gmacs': gmacs}
 
+          # Format each metric name with its numeric value. Use correct f-string
+          # placement: the metric is a string, the value is formatted with .5f.
           metrics_str = ' / '.join(f'{metric}: {value:.5f}'
                                   for metric, value in metrics.items())
           print(f'Image {i: 4d}: {metrics_str}, saving in {out_dir}...')
@@ -143,6 +172,22 @@ def eval_trained_model(config_name,
           break
 
     means = {metric: np.mean(values) for metric, values in accumulated_metrics.items()}
+    
+    # =============== CÁLCULO DO TAMANHO REAL DO MODELO ===============
+    total_params = 0
+    total_bytes = 0
+    for var in tf.trainable_variables():
+        var_params = np.prod(var.shape.as_list())
+        total_params += var_params
+        total_bytes += var_params * var.dtype.size
+    
+    print("\n" + "=" * 60)
+    print(f"Parâmetros Treináveis Totais: {total_params:,}")
+    print(f"Tamanho Real do Modelo (Bytes): {total_bytes:,} bytes")
+    print(f"Tamanho Real do Modelo (MB): {total_bytes / (1024**2):.2f} MB")
+    print("=" * 60 + "\n")
+    # =================================================================
+    
     print('\n'.join(f'{metric}: {val}' for metric, val in means.items()))
     print('Done!')
     return means

@@ -74,6 +74,15 @@ class SWHDCtf(tf.keras.layers.Layer):
             )
 
         super().build(input_shape)
+        # Save the number of input channels the layer was built with so we
+        # can detect later if the layer is (incorrectly) reused with a
+        # different number of channels.
+        try:
+            # input_shape may be a TensorShape; convert to int if possible.
+            self._built_in_channels = int(in_channels)
+        except Exception:
+            # Fallback to None if not convertible.
+            self._built_in_channels = None
 
     def circular_pad_width(self, x, pad):
         """
@@ -101,6 +110,16 @@ class SWHDCtf(tf.keras.layers.Layer):
         x: [B, H, W, C] (NHWC)
         """
         B, H, W, C = tf.unstack(tf.shape(x))
+        # Runtime check: ensure current input channels match built channels.
+        if self._built_in_channels is not None:
+            # Use a TF assert so the error is visible during graph execution.
+            check = tf.assert_equal(
+                C,
+                tf.constant(self._built_in_channels, dtype=tf.int32),
+                data=[C, tf.constant(self._built_in_channels, dtype=tf.int32)]
+            )
+            with tf.control_dependencies([check]):
+                x = tf.identity(x)
         
         row_wise_weights = None
         
@@ -194,6 +213,16 @@ class SWHDCtf(tf.keras.layers.Layer):
 
 
             # Dilated convolution (vertical dilation = 1, horizontal dilation = dilation_rate)
+            # Debug prints to help trace shape mismatches at runtime. Use tf.Print
+            # which returns a tensor with a side-effect in TF1.
+            try:
+                x2 = tf.Print(x2, [tf.shape(x2)], message=f"SWHDCtf: x2 shape at dilation {dilation_rate}: ")
+                k_shape = tf.shape(self.kernel)
+                # Print kernel shape as well.
+                x2 = tf.Print(x2, [k_shape], message="SWHDCtf: kernel shape: ")
+            except Exception:
+                # If tf.Print fails for some reason (graph mode differences), ignore.
+                pass
             out = tf.nn.conv2d(
                 x2,
                 self.kernel,
